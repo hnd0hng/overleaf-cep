@@ -1194,18 +1194,8 @@ module.exports = {
     referenceSearchSetting: [],
     settingsModalEditorTabSections: [],
     settingsModalSpellcheckSections: [],
-    editorFloatingMenuActions: [
-      Path.resolve(
-        __dirname,
-        '../modules/selected-word-count/frontend/components/selected-word-count-action.tsx'
-      ),
-    ],
-    reviewTooltipMenuActions: [
-      Path.resolve(
-        __dirname,
-        '../modules/selected-word-count/frontend/components/selected-word-count-legacy-action.tsx'
-      ),
-    ],
+    editorFloatingMenuActions: [],
+    reviewTooltipMenuActions: [],
     errorLogsComponents: [],
     referenceIndices: [
       Path.resolve(

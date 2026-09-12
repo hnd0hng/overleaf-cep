@@ -1,19 +1,31 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { Text } from '@codemirror/state'
 import { useProjectSettingsContext } from '@/features/editor-left-menu/context/project-settings-context'
+import { useEditorViewContext } from '@/features/ide-react/context/editor-view-context'
+import { useEditorPropertiesContext } from '@/features/ide-react/context/editor-properties-context'
+import { useFileTreeOpenContext } from '@/features/ide-react/context/file-tree-open-context'
+import { useLayoutContext } from '@/shared/context/layout-context'
 import { createSegmenters } from '@/features/word-count-modal/utils/segmenters'
 import { debugConsole } from '@/utils/debugging'
-import {
-  SELECTED_WORD_COUNT_OPEN_EVENT,
-  type SelectedWordCountRequest,
-} from '../selected-word-count-events'
+import { WORD_COUNT_OPEN_REQUESTED_EVENT } from '../selected-word-count-events'
 import {
   countWordsInSelection,
   type SelectedWordCountResult,
 } from '../utils/count-words-in-selection'
 import SelectedWordCountModal from './selected-word-count-modal'
 
+type SelectedWordCountRequest = {
+  doc: Text
+  from: number
+  to: number
+}
+
 export default function SelectedWordCountController() {
   const { spellCheckLanguage } = useProjectSettingsContext()
+  const { view } = useEditorViewContext()
+  const { showVisual } = useEditorPropertiesContext()
+  const { openEntity, selectedEntityCount } = useFileTreeOpenContext()
+  const { view: layoutView } = useLayoutContext()
   const [open, setOpen] = useState(false)
   const [request, setRequest] = useState<SelectedWordCountRequest | null>(null)
   const [data, setData] = useState<SelectedWordCountResult | null>(null)
@@ -29,24 +41,42 @@ export default function SelectedWordCountController() {
   }, [])
 
   useEffect(() => {
-    const handleOpen = (event: Event) => {
-      const { detail } = event as CustomEvent<SelectedWordCountRequest>
-
-      if (!detail || detail.from >= detail.to) {
+    const handleOpenRequested = (event: Event) => {
+      if (
+        !view ||
+        showVisual ||
+        layoutView !== 'editor' ||
+        selectedEntityCount !== 1 ||
+        openEntity?.type !== 'doc'
+      ) {
         return
       }
 
-      setRequest(detail)
+      const { doc, selection } = view.state
+      const { from, to } = selection.main
+
+      if (from >= to) {
+        return
+      }
+
+      event.preventDefault()
+      setRequest({ doc, from, to })
       setData(null)
       setError(false)
       setOpen(true)
     }
 
-    window.addEventListener(SELECTED_WORD_COUNT_OPEN_EVENT, handleOpen)
+    window.addEventListener(
+      WORD_COUNT_OPEN_REQUESTED_EVENT,
+      handleOpenRequested
+    )
     return () => {
-      window.removeEventListener(SELECTED_WORD_COUNT_OPEN_EVENT, handleOpen)
+      window.removeEventListener(
+        WORD_COUNT_OPEN_REQUESTED_EVENT,
+        handleOpenRequested
+      )
     }
-  }, [])
+  }, [layoutView, openEntity, selectedEntityCount, showVisual, view])
 
   useEffect(() => {
     if (!open || !request) {

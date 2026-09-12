@@ -68,7 +68,7 @@ export default function SelectedWordCountModal({
       data-testid="selected-word-count-modal"
     >
       <OLModalHeader>
-        <OLModalTitle>{t('word_count_lower')}</OLModalTitle>
+        <OLModalTitle>{t('selected_text_word_count')}</OLModalTitle>
       </OLModalHeader>
 
       <OLModalBody>

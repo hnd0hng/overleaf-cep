@@ -2385,6 +2385,7 @@
   "selected_lowercase": "selected",
   "selected_lowercase_plural": "selected",
   "selected_plural": "selected",
+  "selected_text_word_count": "Selected text word count",
   "selection_deleted": "Selection deleted",
   "send": "Send",
   "send_notification_emails_to_users": "Send notification emails to the current and the new owners",
