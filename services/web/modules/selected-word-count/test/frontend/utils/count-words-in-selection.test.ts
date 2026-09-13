@@ -17,8 +17,7 @@ describe('selected-text word count', function () {
     from: number,
     to: number,
     localeSegmenters = segmenters
-  ) =>
-    countSelectionResult(content, from, to, localeSegmenters).totalWords
+  ) => countSelectionResult(content, from, to, localeSegmenters).totalWords
 
   const countSelectedText = (content: string, selectedText: string) => {
     const from = content.indexOf(selectedText)
@@ -34,8 +33,7 @@ describe('selected-text word count', function () {
 
   it('returns word, header, and math counts for a mixed selection', function () {
     const content =
-      '\\section{Heading words}\n' +
-      'Body text $x+y$ and \\[z=1\\]'
+      '\\section{Heading words}\n' + 'Body text $x+y$ and \\[z=1\\]'
 
     expect(countSelectionResult(content, 0, content.length)).to.deep.equal({
       totalWords: 5,
@@ -46,9 +44,7 @@ describe('selected-text word count', function () {
   })
 
   it('does not count header or math nodes outside the selection', function () {
-    const content =
-      '\\section{Outside heading}\n' +
-      'Selected words $x+y$'
+    const content = '\\section{Outside heading}\n' + 'Selected words $x+y$'
     const selectedText = 'Selected words'
     const from = content.indexOf(selectedText)
 
@@ -68,10 +64,7 @@ describe('selected-text word count', function () {
 
   it('counts human-readable text inside formatting commands', function () {
     expect(
-      countSelectedText(
-        'This is \\textbf{important text}.',
-        'important text'
-      )
+      countSelectedText('This is \\textbf{important text}.', 'important text')
     ).to.equal(2)
   })
 
@@ -157,102 +150,218 @@ describe('selected-text word count', function () {
     ).to.equal(0)
   })
 
-  it('retains TeXcount ignore state from before the selection', function () {
+  it('counts rendered text inside TeXcount ignore directives', function () {
     expect(
       countSelectedText(
         '%TC:ignore\nthese words are ignored\n%TC:endignore\nvisible',
         'these words are ignored'
       )
-    ).to.equal(0)
+    ).to.equal(4)
   })
 
-  it('does not count structures inside a TeXcount ignore range', function () {
+  it('counts rendered structures inside TeXcount ignore directives', function () {
     const content =
       '%TC:ignore\n' +
-      '\\section{Hidden heading}\n' +
+      '\\section{Visible heading}\n' +
       '$x+y$\n' +
       '\\[z=1\\]\n' +
       '%TC:endignore\n' +
       'visible'
-    const selectedText =
-      '\\section{Hidden heading}\n$x+y$\n\\[z=1\\]'
+    const selectedText = '\\section{Visible heading}\n$x+y$\n\\[z=1\\]'
     const from = content.indexOf(selectedText)
 
     expect(
       countSelectionResult(content, from, from + selectedText.length)
     ).to.deep.equal({
-      totalWords: 0,
-      headers: 0,
+      totalWords: 2,
+      headers: 1,
+      mathInline: 1,
+      mathDisplay: 1,
+    })
+  })
+
+  it('collapses comments in the same way as LaTeX', function () {
+    const content = 'inter% comment removes the newline\nnational'
+
+    expect(countSelection(content, 0, content.length)).to.equal(1)
+  })
+
+  it('does not follow input or include files or count their paths', function () {
+    const content =
+      'Before.\n\\input{chapter}\nMiddle.\n\\include{appendix}\nAfter.'
+
+    expect(countSelection(content, 0, content.length)).to.equal(3)
+  })
+
+  it('counts title, author, affiliation, and date rendered by maketitle', function () {
+    const content =
+      '\\title{Visible Title}\n' +
+      '\\author{Alice Smith}\n' +
+      '\\affil{Example University}\n' +
+      '\\date{June 2026}\n' +
+      '\\begin{document}\\maketitle\\end{document}'
+
+    expect(countSelectionResult(content, 0, content.length)).to.deep.equal({
+      totalWords: 8,
+      headers: 1,
       mathInline: 0,
       mathDisplay: 0,
     })
   })
 
-  it('honors TeXcount directives inside manually traversed nodes', function () {
-    const cases = [
-      {
-        content:
-          '\\section{visible\n' +
-          '%TC:ignore\n' +
-          'hidden words\n' +
-          '%TC:endignore\n' +
-          'again}',
-        headers: 1,
-      },
-      {
-        content:
-          '\\caption{visible\n' +
-          '%TC:ignore\n' +
-          'hidden words\n' +
-          '%TC:endignore\n' +
-          'again}',
-        headers: 0,
-      },
-      {
-        content:
-          '\\footnote{visible\n' +
-          '%TC:ignore\n' +
-          'hidden words\n' +
-          '%TC:endignore\n' +
-          'again}',
-        headers: 0,
-      },
-      {
-        content:
-          '\\begin{abstract}\n' +
-          'visible\n' +
-          '%TC:ignore\n' +
-          'hidden words\n' +
-          '%TC:endignore\n' +
-          'again\n' +
-          '\\end{abstract}',
-        headers: 1,
-      },
-      {
-        content:
-          '\\cite[visible\n' +
-          '%TC:ignore\n' +
-          'hidden words\n' +
-          '%TC:endignore\n' +
-          'again]{key}',
-        headers: 0,
-      },
-    ]
+  it('does not count title metadata when maketitle is absent', function () {
+    const content =
+      '\\title{Hidden Title}\\author{Hidden Author}\\begin{document}Body\\end{document}'
 
-    for (const { content, headers } of cases) {
-      expect(countSelectionResult(content, 0, content.length)).to.deep.equal({
-        totalWords: 2,
-        headers,
-        mathInline: 0,
-        mathDisplay: 0,
-      })
-    }
+    expect(countSelection(content, 0, content.length)).to.equal(1)
   })
 
-  it('does not follow input files or count their paths', function () {
-    const content = 'Before.\n\\input{chapter}\nAfter.'
+  it('counts IEEE author block contents rendered by maketitle', function () {
+    const content =
+      '\\begin{document}' +
+      '\\author{\\IEEEauthorblockN{Alice Smith}\\IEEEauthorblockA{Example University}}' +
+      '\\maketitle\\end{document}'
+
+    expect(countSelection(content, 0, content.length)).to.equal(4)
+  })
+
+  it('does not count layout dimensions or drawing parameters', function () {
+    const content = 'Before \\vspace{12pt} \\hspace{2em} \\cline{2-4} after.'
 
     expect(countSelection(content, 0, content.length)).to.equal(2)
+  })
+
+  it('does not count phantom text', function () {
+    const content = 'Before \\phantom{hidden words} after.'
+
+    expect(countSelection(content, 0, content.length)).to.equal(2)
+  })
+
+  it('counts visible href labels but not target URLs', function () {
+    const content = '\\href{https://example.test/internal-path}{Visible link}'
+
+    expect(countSelection(content, 0, content.length)).to.equal(2)
+  })
+
+  it('counts URLs that are rendered by the url command', function () {
+    const content = '\\url{visible-address}'
+
+    expect(countSelection(content, 0, content.length)).to.equal(1)
+  })
+
+  it('counts literal contents of verb and lstinline commands', function () {
+    const content = 'Use \\verb|visible code| and \\lstinline!more code! here.'
+
+    expect(countSelection(content, 0, content.length)).to.equal(7)
+  })
+
+  it('counts visible verbatim environment content', function () {
+    const content =
+      'Before \\begin{verbatim}literal code words\\end{verbatim} after.'
+
+    expect(countSelection(content, 0, content.length)).to.equal(5)
+  })
+
+  it('does not count content in non-rendering environments', function () {
+    const content = 'Before \\begin{comment}hidden words\\end{comment} after.'
+
+    expect(countSelection(content, 0, content.length)).to.equal(2)
+  })
+
+  it('counts text-producing commands inside math', function () {
+    const content =
+      'Before $x + \\text{visible words} + \\textrm{more text}$ after.'
+
+    expect(countSelectionResult(content, 0, content.length)).to.deep.equal({
+      totalWords: 6,
+      headers: 0,
+      mathInline: 1,
+      mathDisplay: 0,
+    })
+  })
+
+  it('counts supported plain-text commands inside math', function () {
+    const content = 'Before $\\mathrm{unit} + \\textnormal{normal text}$ after.'
+
+    expect(countSelectionResult(content, 0, content.length)).to.deep.equal({
+      totalWords: 5,
+      headers: 0,
+      mathInline: 1,
+      mathDisplay: 0,
+    })
+  })
+
+  it('counts built-in text-producing macros', function () {
+    const content = 'Made with \\TeX, \\LaTeX, and \\BibTeX.'
+
+    expect(countSelection(content, 0, content.length)).to.equal(6)
+  })
+
+  it('expands simple zero-argument text macros after their definition', function () {
+    const content =
+      '\\newcommand{\\project}{Visible Project Name}' +
+      '\\begin{document}The \\project works.\\end{document}'
+
+    expect(countSelection(content, 0, content.length)).to.equal(5)
+  })
+
+  it('expands simple def macros after their definition', function () {
+    const content =
+      '\\def\\project{Visible Project}' +
+      '\\begin{document}The \\project works.\\end{document}'
+
+    expect(countSelection(content, 0, content.length)).to.equal(4)
+  })
+
+  it('uses the latest simple renewcommand definition', function () {
+    const content =
+      '\\newcommand{\\project}{First Name}' +
+      '\\renewcommand{\\project}{Second Name}' +
+      '\\begin{document}\\project\\end{document}'
+
+    expect(countSelection(content, 0, content.length)).to.equal(2)
+  })
+
+  it('skips parameterized custom macros conservatively', function () {
+    const content =
+      '\\newcommand{\\greet}[1]{Hello #1}' +
+      '\\begin{document}Before \\greet{World} after.\\end{document}'
+
+    expect(countSelection(content, 0, content.length)).to.equal(2)
+  })
+
+  it('does not count macro definitions as rendered text', function () {
+    const content =
+      '\\newcommand{\\project}{Definition words}' +
+      '\\begin{document}Visible body\\end{document}'
+
+    expect(countSelection(content, 0, content.length)).to.equal(2)
+  })
+
+  it('keeps table and bibliography prose in the word count', function () {
+    const content =
+      '\\begin{table}\\begin{tabular}{c}Visible table cell\\end{tabular}\\end{table}' +
+      '\\begin{thebibliography}{1}\\bibitem{key}Visible reference words\\end{thebibliography}'
+
+    expect(countSelection(content, 0, content.length)).to.equal(6)
+  })
+
+  it('counts optional item labels because they are rendered', function () {
+    const content =
+      '\\begin{description}\\item[Visible label]Body text\\end{description}'
+
+    expect(countSelection(content, 0, content.length)).to.equal(4)
+  })
+
+  it('keeps formatted ordinal fragments joined inside IEEE author blocks', function () {
+    const content =
+      '\\begin{document}' +
+      '\\author{' +
+      '\\IEEEauthorblockN{1\\textsuperscript{st} Author}\\and' +
+      '\\IEEEauthorblockN{2\\textsuperscript{nd} Author}}' +
+      '\\maketitle\\end{document}'
+
+    expect(countSelection(content, 0, content.length)).to.equal(4)
   })
 
   it('counts headings, captions, and footnotes as selected words', function () {

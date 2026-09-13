@@ -12,6 +12,11 @@ type TextNode = SourceRange & {
   text: string
 }
 
+type SimpleMacroDefinition = {
+  from: number
+  text: string
+}
+
 export type SelectedWordCountResult = {
   totalWords: number
   headers: number
@@ -85,8 +90,66 @@ const replacementsMap = new Map<string, string>([
   ['~', ''],
   ['TeX', 'TeX'],
   ['LaTeX', 'LaTeX'],
+  ['BibTeX', 'BibTeX'],
   ['textbackslash', '\\'],
 ])
+
+const hiddenContentCommands = new Set(['phantom', 'hphantom', 'vphantom'])
+
+const nonRenderingCommands = new Set([
+  'addtocounter',
+  'addtolength',
+  'bibliography',
+  'bibliographystyle',
+  'cline',
+  'color',
+  'hspace',
+  'includegraphics',
+  'includesvg',
+  'label',
+  'pagestyle',
+  'rule',
+  'setcounter',
+  'setlength',
+  'thispagestyle',
+  'vspace',
+])
+
+const transparentTextCommands = new Set([
+  'MakeLowercase',
+  'MakeUppercase',
+  'fbox',
+  'lowercase',
+  'mbox',
+  'uppercase',
+])
+
+const boundaryTextCommands = new Set([
+  'IEEEauthorblockA',
+  'IEEEauthorblockN',
+  'centerline',
+])
+
+const nonRenderingEnvironments = new Set([
+  'comment',
+  'filecontents',
+  'filecontents*',
+])
+
+const verbatimEnvironments = new Set([
+  'Verbatim',
+  'boxedverbatim',
+  'codeexample',
+  'lstlisting',
+  'minted',
+  'tcblisting',
+  'verbatim',
+])
+
+const plainMathTextCommands = new Set(['mbox', 'mathrm', 'textnormal'])
+
+const isSimpleMacroText = (text: string) =>
+  text.length > 0 && !/[\\{}#$%&_~^]/u.test(text)
 
 export const countWordsInSelection = (
   content: string,
@@ -112,7 +175,71 @@ export const countWordsInSelection = (
   const tree = LaTeXLanguage.parser.parse(content)
   const textNodes: TextNode[] = []
   const transparentRanges: SourceRange[] = []
+  const collapsedRanges: SourceRange[] = []
   const boundaryRanges: SourceRange[] = []
+  const boundaryPositions: number[] = []
+  const maketitlePositions: number[] = []
+  const simpleMacroDefinitions = new Map<string, SimpleMacroDefinition[]>()
+
+  const addSimpleMacroDefinition = (
+    name: string,
+    definition: SimpleMacroDefinition
+  ) => {
+    const definitions = simpleMacroDefinitions.get(name) ?? []
+    definitions.push(definition)
+    simpleMacroDefinitions.set(name, definitions)
+  }
+
+  tree.iterate({
+    enter(nodeRef: SyntaxNodeRef) {
+      if (nodeRef.type.is('Maketitle')) {
+        maketitlePositions.push(nodeRef.from)
+        return false
+      }
+
+      const isNewCommand =
+        nodeRef.type.is('NewCommand') || nodeRef.type.is('RenewCommand')
+      const isDef = nodeRef.type.is('Def')
+      if (!isNewCommand && !isDef) {
+        return
+      }
+
+      if (
+        (isNewCommand &&
+          nodeRef.node.getChildren('OptionalArgument').length > 0) ||
+        (isDef && nodeRef.node.getChildren('MacroParameter').length > 0)
+      ) {
+        return false
+      }
+
+      const nameNode =
+        nodeRef.node.getChild('Csname') ??
+        nodeRef.node.getChild('LiteralArgContent')
+      const definitionNode = nodeRef.node.getChild('DefinitionArgument')
+      if (!nameNode || !definitionNode) {
+        return false
+      }
+
+      const nameMatch = /\\([A-Za-z@]+)/u.exec(
+        content.substring(nameNode.from, nameNode.to)
+      )
+      const definitionText = content.substring(
+        definitionNode.from + 1,
+        definitionNode.to - 1
+      )
+
+      if (nameMatch && isSimpleMacroText(definitionText)) {
+        addSimpleMacroDefinition(nameMatch[1], {
+          from: nodeRef.to,
+          text: definitionText,
+        })
+      }
+
+      return false
+    },
+  })
+
+  const preambleExtent = findPreambleExtent(tree)
 
   const intersectsRange = (span: SourceRange) =>
     span.to > range.from && span.from < range.to
@@ -125,29 +252,45 @@ export const countWordsInSelection = (
 
   const addBoundaryRange = (span: SourceRange) => {
     if (intersectsRange(span)) {
-      boundaryRanges.push(span)
+      boundaryRanges.push({ from: span.from, to: span.to })
+    }
+  }
+
+  const addBoundaryPositions = (span: SourceRange) => {
+    if (intersectsRange(span)) {
+      boundaryPositions.push(span.from, span.to)
     }
   }
 
   const addTransparentRange = (span: SourceRange) => {
     if (intersectsRange(span)) {
-      transparentRanges.push(span)
+      transparentRanges.push({ from: span.from, to: span.to })
     }
   }
 
-  const addSourceTextNode = (nodeRef: SyntaxNodeRef) => {
-    if (!intersectsRange(nodeRef)) {
+  const addCollapsedRange = (span: SourceRange) => {
+    if (intersectsRange(span)) {
+      collapsedRanges.push({ from: span.from, to: span.to })
+    }
+  }
+
+  const addSourceTextSpan = (span: SourceRange) => {
+    if (!intersectsRange(span)) {
       return
     }
 
-    const from = Math.max(nodeRef.from, range.from)
-    const to = Math.min(nodeRef.to, range.to)
+    const from = Math.max(span.from, range.from)
+    const to = Math.min(span.to, range.to)
 
     textNodes.push({
       from,
       to,
       text: content.substring(from, to),
     })
+  }
+
+  const addSourceTextNode = (nodeRef: SyntaxNodeRef) => {
+    addSourceTextSpan(nodeRef)
   }
 
   const addSyntheticTextNode = (
@@ -166,14 +309,23 @@ export const countWordsInSelection = (
     })
   }
 
-  const state = {
-    skipping: false,
+  const findSimpleMacroReplacement = (name: string, position: number) => {
+    const definitions = simpleMacroDefinitions.get(name)
+    if (!definitions) {
+      return
+    }
+
+    let replacement: string | undefined
+    for (const definition of definitions) {
+      if (definition.from > position) {
+        break
+      }
+      replacement = definition.text
+    }
+    return replacement
   }
 
   const visitBodyNode = (nodeRef: SyntaxNodeRef): boolean | void => {
-    if (state.skipping && !nodeRef.type.is('Comment')) {
-      return
-    }
     return bodyMatcher(nodeRef.type)?.(nodeRef)
   }
 
@@ -186,40 +338,119 @@ export const countWordsInSelection = (
   }
 
   const handleComment = (nodeRef: SyntaxNodeRef) => {
-    addBoundaryRange(nodeRef)
+    addTransparentRange(nodeRef)
+    addCollapsedRange(nodeRef)
+  }
 
-    const comment = content.slice(nodeRef.from, nodeRef.to)
-    const match = /^%+TC:\s*(\w+)\s*/i.exec(comment)
+  const addDelimitedLiteralContent = (nodeRef: SourceRange) => {
+    let from = nodeRef.from
+    let to = nodeRef.to
 
-    if (!match) {
-      return
+    if (content[from] === '*') {
+      from++
     }
 
-    switch (match[1].toLowerCase()) {
-      case 'ignore':
-        state.skipping = true
-        break
-      case 'endignore':
-        state.skipping = false
-        break
-      default:
-        break
+    if (to - from >= 2) {
+      from++
+      to--
+    }
+
+    if (from < to) {
+      addSourceTextSpan({ from, to })
     }
   }
 
+  const isRenderedByMaketitle = (nodeRef: SyntaxNodeRef) =>
+    maketitlePositions.some(position => position >= nodeRef.to)
+
+  const handleMaketitleText = (
+    nodeRef: SyntaxNodeRef,
+    countAsHeader = false
+  ) => {
+    if (!isRenderedByMaketitle(nodeRef)) {
+      return false
+    }
+
+    if (countAsHeader && intersectsRange(nodeRef)) {
+      result.headers++
+    }
+
+    if (nodeRef.type.is('Date')) {
+      const dateArgument = nodeRef.node.getChild('ShortTextArgument')
+      if (dateArgument) {
+        iterateNode(dateArgument)
+      }
+      return false
+    }
+
+    iterateNode(nodeRef)
+    return false
+  }
+
+  const handleMathText = (nodeRef: SyntaxNodeRef) => {
+    nodeRef.node.cursor().iterate(childNodeRef => {
+      if (childNodeRef.node === nodeRef.node) {
+        return
+      }
+
+      if (childNodeRef.type.is('MathTextCommand')) {
+        const textArgument = childNodeRef.node.getChild('TextArgument')
+        if (textArgument) {
+          iterateNode(textArgument)
+        }
+        return false
+      }
+
+      if (childNodeRef.type.is('MathUnknownCommand')) {
+        const macro = childNodeRef.node.getChild('$CtrlSeq')
+        const argument = childNodeRef.node.getChild('MathArgument')
+        if (!macro || !argument) {
+          return false
+        }
+
+        const commandName = content.substring(macro.from + 1, macro.to)
+        const argumentText = content.substring(
+          argument.from + 1,
+          argument.to - 1
+        )
+        if (
+          plainMathTextCommands.has(commandName) &&
+          isSimpleMacroText(argumentText)
+        ) {
+          addSourceTextSpan({ from: argument.from + 1, to: argument.to - 1 })
+        }
+        return false
+      }
+    })
+  }
+
   const handleEnvironment = (nodeRef: SyntaxNodeRef) => {
-    const envNameNode = nodeRef.node
+    const envNameGroup = nodeRef.node
       .getChild('BeginEnv')
       ?.getChild('EnvNameGroup')
-      ?.getChild('EnvName')
 
-    if (!envNameNode) {
+    if (!envNameGroup) {
       return
     }
 
     const envName = content
-      .substring(envNameNode.from, envNameNode.to)
+      .substring(envNameGroup.from + 1, envNameGroup.to - 1)
       .replace(/\*$/, '')
+
+    if (nonRenderingEnvironments.has(envName)) {
+      addBoundaryRange(nodeRef)
+      return false
+    }
+
+    if (verbatimEnvironments.has(envName)) {
+      const verbatimContent = nodeRef.node
+        .getChild('Content')
+        ?.getChild('VerbatimContent')
+      if (verbatimContent) {
+        addSourceTextSpan(verbatimContent)
+      }
+      return false
+    }
 
     if (envName !== 'abstract') {
       return
@@ -245,11 +476,10 @@ export const countWordsInSelection = (
       return false
     },
     Title(nodeRef) {
-      if (intersectsRange(nodeRef)) {
-        result.headers++
-      }
-      iterateNode(nodeRef)
-      return false
+      return handleMaketitleText(nodeRef, true)
+    },
+    'Author Affil Affiliation Date'(nodeRef) {
+      return handleMaketitleText(nodeRef)
     },
     $Environment(nodeRef) {
       return handleEnvironment(nodeRef)
@@ -294,19 +524,101 @@ export const countWordsInSelection = (
         return false
       }
 
-      const replacement = replacementsMap.get(commandName)
-      if (replacement === undefined) {
+      if (
+        hiddenContentCommands.has(commandName) ||
+        nonRenderingCommands.has(commandName)
+      ) {
+        addBoundaryRange(nodeRef)
+        return false
+      }
+
+      if (boundaryTextCommands.has(commandName)) {
+        addBoundaryPositions(nodeRef)
         return
       }
 
-      addSyntheticTextNode(macro, replacement, nodeRef)
+      if (transparentTextCommands.has(commandName)) {
+        addTransparentRange(nodeRef)
+        return
+      }
+
+      const simpleMacroReplacement = findSimpleMacroReplacement(
+        commandName,
+        macro.from
+      )
+      if (simpleMacroReplacement !== undefined) {
+        addSyntheticTextNode(macro, simpleMacroReplacement)
+        return false
+      }
+
+      const replacement = replacementsMap.get(commandName)
+      if (replacement === undefined) {
+        addBoundaryRange(nodeRef)
+        return false
+      }
+
+      const commandTail = content.substring(macro.to, nodeRef.to)
+      addSyntheticTextNode(
+        macro,
+        replacement,
+        commandTail.trim() === '' ? macro : nodeRef
+      )
       return false
     },
     $Environment(nodeRef) {
       return handleEnvironment(nodeRef)
     },
+    'Title Author Affil Affiliation Date'(nodeRef) {
+      if (nodeRef.to <= preambleExtent.to) {
+        return false
+      }
+      return handleMaketitleText(nodeRef, nodeRef.type.is('Title'))
+    },
     '$ToggleTextFormattingCommand $OtherTextFormattingCommand'(nodeRef) {
       addTransparentRange(nodeRef)
+    },
+    HrefCommand(nodeRef) {
+      const label = nodeRef.node.getChild('ShortTextArgument')
+      if (label) {
+        iterateNode(label)
+      }
+      return false
+    },
+    UrlCommand(nodeRef) {
+      const literalContent = nodeRef.node
+        .getChild('UrlArgument')
+        ?.getChild('LiteralArgContent')
+      if (literalContent) {
+        addSourceTextSpan(literalContent)
+      }
+      return false
+    },
+    'VerbCommand LstInlineCommand'(nodeRef) {
+      const literalContent =
+        nodeRef.node.getChild('VerbContent') ??
+        nodeRef.node.getChild('LstInlineContent')
+      if (literalContent) {
+        addDelimitedLiteralContent(literalContent)
+      }
+      return false
+    },
+    Item(nodeRef) {
+      for (const optionalArgument of nodeRef.node.getChildren(
+        'OptionalArgument'
+      )) {
+        const label = optionalArgument.getChild('ShortOptionalArg')
+        if (label) {
+          iterateNode(label)
+        }
+      }
+      return false
+    },
+    'Def Let NewCommand RenewCommand NewEnvironment RenewEnvironment NewTheoremCommand TheoremStyleCommand'() {
+      return false
+    },
+    'IncludeGraphics IncludeSvg SetLengthCommand'(nodeRef) {
+      addBoundaryRange(nodeRef)
+      return false
     },
     BeginEnv() {
       return false
@@ -317,6 +629,7 @@ export const countWordsInSelection = (
       }
 
       addBoundaryRange(nodeRef)
+      handleMathText(nodeRef)
 
       const parent = nodeRef.node.parent
       if (parent?.type.is('InlineMath') || parent?.type.is('ParenMath')) {
@@ -355,15 +668,10 @@ export const countWordsInSelection = (
     },
   })
 
-  const preambleExtent = findPreambleExtent(tree)
-
   tree.iterate({
     from: 0,
     to: preambleExtent.to,
     enter(nodeRef: SyntaxNodeRef) {
-      if (state.skipping && !nodeRef.type.is('Comment')) {
-        return
-      }
       return headMatcher(nodeRef.type)?.(nodeRef)
     },
   })
@@ -371,6 +679,9 @@ export const countWordsInSelection = (
   tree.iterate({
     from: preambleExtent.to,
     enter(nodeRef: SyntaxNodeRef) {
+      if (nodeRef.to <= preambleExtent.to) {
+        return false
+      }
       return visitBodyNode(nodeRef)
     },
   })
@@ -378,6 +689,27 @@ export const countWordsInSelection = (
   let text = ''
   let position = range.from
   const mergedTransparentRanges = mergeRanges(transparentRanges)
+  const mergedCollapsedRanges = mergeRanges(collapsedRanges)
+
+  const gapHasVisibleWhitespace = (gap: SourceRange) => {
+    let cursor = gap.from
+
+    for (const span of mergedCollapsedRanges) {
+      if (span.to <= cursor) {
+        continue
+      }
+      if (span.from >= gap.to) {
+        break
+      }
+
+      if (/\s/u.test(content.substring(cursor, Math.max(cursor, span.from)))) {
+        return true
+      }
+      cursor = Math.max(cursor, Math.min(span.to, gap.to))
+    }
+
+    return /\s/u.test(content.substring(cursor, gap.to))
+  }
 
   for (const textNode of textNodes) {
     const gap = {
@@ -386,9 +718,12 @@ export const countWordsInSelection = (
     }
     const isTransparentGap =
       gap.from < gap.to &&
-      !/\s/u.test(content.substring(gap.from, gap.to)) &&
       mergedTransparentRanges.some(
         span => span.from <= gap.from && span.to >= gap.to
+      ) &&
+      !gapHasVisibleWhitespace(gap) &&
+      !boundaryPositions.some(
+        position => position >= gap.from && position <= gap.to
       ) &&
       !boundaryRanges.some(span => rangesOverlap(span, gap))
 
