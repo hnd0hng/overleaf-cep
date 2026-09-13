@@ -1,16 +1,25 @@
 import { expect } from 'chai'
 import { createSegmenters } from '@/features/word-count-modal/utils/segmenters'
 import { countWordsInSelection } from '../../../frontend/utils/count-words-in-selection'
+import { createSentenceSegmenter } from '../../../frontend/utils/sentence-segmenter'
 
 describe('selected-text word count', function () {
   const segmenters = createSegmenters('en-US')
+  const sentenceSegmenter = createSentenceSegmenter('en-US')
 
   const countSelectionResult = (
     content: string,
     from: number,
     to: number,
-    localeSegmenters = segmenters
-  ) => countWordsInSelection(content, { from, to }, localeSegmenters)
+    localeSegmenters = segmenters,
+    localeSentenceSegmenter = sentenceSegmenter
+  ) =>
+    countWordsInSelection(
+      content,
+      { from, to },
+      localeSegmenters,
+      localeSentenceSegmenter
+    )
 
   const countSelection = (
     content: string,
@@ -31,12 +40,97 @@ describe('selected-text word count', function () {
     expect(countSelection(content, 0, content.length)).to.equal(4)
   })
 
+  it('counts common sentence-ending punctuation', function () {
+    const content = 'Hello world. This works! Is it ready?'
+
+    expect(countSelectionResult(content, 0, content.length).sentences).to.equal(
+      3
+    )
+  })
+
+  it('counts a final sentence without ending punctuation', function () {
+    const content = 'Hello world'
+
+    expect(countSelectionResult(content, 0, content.length).sentences).to.equal(
+      1
+    )
+  })
+
+  it('does not count punctuation-only segments as sentences', function () {
+    const content = '... ?!'
+
+    expect(countSelectionResult(content, 0, content.length).sentences).to.equal(
+      0
+    )
+  })
+
+  it('handles decimal numbers and common abbreviations', function () {
+    const content = 'Use e.g. version 3.14 today. It works.'
+
+    expect(countSelectionResult(content, 0, content.length).sentences).to.equal(
+      2
+    )
+  })
+
+  it('counts sentences from visible text after filtering LaTeX', function () {
+    const content =
+      'First \\textbf{visible} sentence. % hidden sentence.\n' +
+      'Second $x+y$ sentence!'
+
+    expect(countSelectionResult(content, 0, content.length)).to.deep.equal({
+      totalWords: 5,
+      sentences: 2,
+      headers: 0,
+      mathInline: 1,
+      mathDisplay: 0,
+    })
+  })
+
+  it('counts sentences only inside the selected range', function () {
+    const content = 'First sentence. Second sentence! Third sentence?'
+    const selectedText = 'Second sentence!'
+    const from = content.indexOf(selectedText)
+
+    expect(
+      countSelectionResult(content, from, from + selectedText.length).sentences
+    ).to.equal(1)
+  })
+
+  it('uses locale-aware sentence segmentation for English', function () {
+    const content = 'This is sentence one. This is sentence two!'
+
+    expect(
+      countSelectionResult(
+        content,
+        0,
+        content.length,
+        createSegmenters('en-US'),
+        createSentenceSegmenter('en-US')
+      ).sentences
+    ).to.equal(2)
+  })
+
+  it('falls back when the sentence locale is invalid', function () {
+    const content = 'First sentence. Second sentence!'
+
+    expect(
+      countSelectionResult(
+        content,
+        0,
+        content.length,
+        segmenters,
+        createSentenceSegmenter('invalid_locale')
+      ).sentences
+    ).to.equal(2)
+  })
+
   it('returns word, header, and math counts for a mixed selection', function () {
     const content =
       '\\section{Heading words}\n' + 'Body text $x+y$ and \\[z=1\\]'
 
     expect(countSelectionResult(content, 0, content.length)).to.deep.equal({
       totalWords: 5,
+      sentences: 1,
       headers: 1,
       mathInline: 1,
       mathDisplay: 1,
@@ -52,6 +146,7 @@ describe('selected-text word count', function () {
       countSelectionResult(content, from, from + selectedText.length)
     ).to.deep.equal({
       totalWords: 2,
+      sentences: 1,
       headers: 0,
       mathInline: 0,
       mathDisplay: 0,
@@ -91,6 +186,7 @@ describe('selected-text word count', function () {
 
     expect(countSelectionResult(content, 0, content.length)).to.deep.equal({
       totalWords: 2,
+      sentences: 1,
       headers: 0,
       mathInline: 1,
       mathDisplay: 0,
@@ -102,6 +198,7 @@ describe('selected-text word count', function () {
 
     expect(countSelectionResult(content, 0, content.length)).to.deep.equal({
       totalWords: 2,
+      sentences: 1,
       headers: 0,
       mathInline: 0,
       mathDisplay: 0,
@@ -135,6 +232,7 @@ describe('selected-text word count', function () {
       countSelectionResult(content, from, from + selectedText.length)
     ).to.deep.equal({
       totalWords: 0,
+      sentences: 0,
       headers: 0,
       mathInline: 1,
       mathDisplay: 0,
@@ -174,6 +272,7 @@ describe('selected-text word count', function () {
       countSelectionResult(content, from, from + selectedText.length)
     ).to.deep.equal({
       totalWords: 2,
+      sentences: 1,
       headers: 1,
       mathInline: 1,
       mathDisplay: 1,
@@ -203,6 +302,7 @@ describe('selected-text word count', function () {
 
     expect(countSelectionResult(content, 0, content.length)).to.deep.equal({
       totalWords: 8,
+      sentences: 1,
       headers: 1,
       mathInline: 0,
       mathDisplay: 0,
@@ -274,6 +374,7 @@ describe('selected-text word count', function () {
 
     expect(countSelectionResult(content, 0, content.length)).to.deep.equal({
       totalWords: 6,
+      sentences: 1,
       headers: 0,
       mathInline: 1,
       mathDisplay: 0,
@@ -285,6 +386,7 @@ describe('selected-text word count', function () {
 
     expect(countSelectionResult(content, 0, content.length)).to.deep.equal({
       totalWords: 5,
+      sentences: 1,
       headers: 0,
       mathInline: 1,
       mathDisplay: 0,
@@ -373,12 +475,12 @@ describe('selected-text word count', function () {
     expect(countSelection(content, 0, content.length)).to.equal(7)
   })
 
-  it('uses Unicode-aware segmentation for Vietnamese', function () {
-    const content = 'Đây là một đoạn văn tiếng Việt.'
+  it('uses Unicode-aware segmentation for English text', function () {
+    const content = 'The café résumé is ready.'
 
     expect(
-      countSelection(content, 0, content.length, createSegmenters('vi'))
-    ).to.equal(7)
+      countSelection(content, 0, content.length, createSegmenters('en-US'))
+    ).to.equal(5)
   })
 
   it('counts a complete synthetic replacement as one atomic word', function () {
@@ -397,6 +499,7 @@ describe('selected-text word count', function () {
     expect(countSelection('one two', 3, 3)).to.equal(0)
     expect(countSelectionResult('one two', 3, 3)).to.deep.equal({
       totalWords: 0,
+      sentences: 0,
       headers: 0,
       mathInline: 0,
       mathDisplay: 0,

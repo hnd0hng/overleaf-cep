@@ -2,6 +2,7 @@ import { NodeType, type SyntaxNodeRef } from '@lezer/common'
 import { LaTeXLanguage } from '@/features/source-editor/languages/latex/latex-language'
 import { findPreambleExtent } from '@/features/word-count-modal/utils/find-preamble-extent'
 import type { Segmenters } from '@/features/word-count-modal/utils/segmenters'
+import type { SentenceSegmenter } from './sentence-segmenter'
 
 type SourceRange = {
   from: number
@@ -19,6 +20,7 @@ type SimpleMacroDefinition = {
 
 export type SelectedWordCountResult = {
   totalWords: number
+  sentences: number
   headers: number
   mathInline: number
   mathDisplay: number
@@ -154,10 +156,12 @@ const isSimpleMacroText = (text: string) =>
 export const countWordsInSelection = (
   content: string,
   sourceRange: SourceRange,
-  segmenters: Segmenters
+  segmenters: Segmenters,
+  sentenceSegmenter: SentenceSegmenter
 ): SelectedWordCountResult => {
   const result: SelectedWordCountResult = {
     totalWords: 0,
+    sentences: 0,
     headers: 0,
     mathInline: 0,
     mathDisplay: 0,
@@ -739,6 +743,15 @@ export const countWordsInSelection = (
   )) {
     if (value.isWordLike) {
       result.totalWords++
+    }
+  }
+
+  for (const sentence of sentenceSegmenter.segment(text)) {
+    for (const word of segmenters.word.segment(sentence.segment)) {
+      if (word.isWordLike) {
+        result.sentences++
+        break
+      }
     }
   }
 

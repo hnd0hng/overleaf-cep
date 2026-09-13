@@ -38,6 +38,12 @@ export default function SelectedWordCountModal({
           testId: 'selected-word-count-total',
         },
         {
+          key: 'sentences',
+          label: t('sentences'),
+          value: data.sentences,
+          testId: 'selected-word-count-sentences',
+        },
+        {
           key: 'headers',
           label: t('headers'),
           value: data.headers,

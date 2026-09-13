@@ -103,10 +103,12 @@ describe('<SelectedWordCountController />', function () {
     cy.findByRole('dialog').within(() => {
       cy.findByText('Selected text word count').should('exist')
       cy.findByText('Total Words').should('exist')
+      cy.findByText('Sentences').should('exist')
       cy.findByText('Headers').should('exist')
       cy.findByText('Math Inline').should('exist')
       cy.findByText('Math Display').should('exist')
       cy.findByTestId('selected-word-count-total').should('have.text', '2')
+      cy.findByTestId('selected-word-count-sentences').should('have.text', '1')
       cy.findByTestId('selected-word-count-headers').should('have.text', '0')
       cy.findByTestId('selected-word-count-math-inline').should(
         'have.text',
@@ -124,8 +126,7 @@ describe('<SelectedWordCountController />', function () {
 
   it('shows the selected header and math breakdown', function () {
     const content =
-      '\\section{Heading words}\n' +
-      'Body text $x+y$ and \\[z=1\\]'
+      '\\section{Heading words}\n' + 'Body text $x+y$ and \\[z=1\\]'
     mountController(content, 0, content.length)
 
     cy.then(() => {
@@ -134,6 +135,7 @@ describe('<SelectedWordCountController />', function () {
 
     cy.findByRole('dialog').within(() => {
       cy.findByTestId('selected-word-count-total').should('have.text', '5')
+      cy.findByTestId('selected-word-count-sentences').should('have.text', '1')
       cy.findByTestId('selected-word-count-headers').should('have.text', '1')
       cy.findByTestId('selected-word-count-math-inline').should(
         'have.text',
@@ -155,6 +157,7 @@ describe('<SelectedWordCountController />', function () {
     })
 
     cy.findByTestId('selected-word-count-total').should('have.text', '0')
+    cy.findByTestId('selected-word-count-sentences').should('have.text', '0')
   })
 
   it('does not handle the request when the selection is empty', function () {

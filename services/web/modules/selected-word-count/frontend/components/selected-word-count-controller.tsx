@@ -12,6 +12,7 @@ import {
   countWordsInSelection,
   type SelectedWordCountResult,
 } from '../utils/count-words-in-selection'
+import { createSentenceSegmenter } from '../utils/sentence-segmenter'
 import SelectedWordCountModal from './selected-word-count-modal'
 
 type SelectedWordCountRequest = {
@@ -33,6 +34,10 @@ export default function SelectedWordCountController() {
 
   const segmenters = useMemo(() => {
     return createSegmenters(spellCheckLanguage?.replace(/_/, '-'))
+  }, [spellCheckLanguage])
+
+  const sentenceSegmenter = useMemo(() => {
+    return createSentenceSegmenter(spellCheckLanguage?.replace(/_/, '-'))
   }, [spellCheckLanguage])
 
   const onClose = useCallback(() => {
@@ -87,14 +92,15 @@ export default function SelectedWordCountController() {
       const nextData = countWordsInSelection(
         request.doc.toString(),
         { from: request.from, to: request.to },
-        segmenters
+        segmenters,
+        sentenceSegmenter
       )
       setData(nextData)
     } catch (error) {
       debugConsole.error(error)
       setError(true)
     }
-  }, [open, request, segmenters])
+  }, [open, request, segmenters, sentenceSegmenter])
 
   return (
     <SelectedWordCountModal
