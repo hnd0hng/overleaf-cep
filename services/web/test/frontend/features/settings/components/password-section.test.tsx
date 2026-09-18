@@ -188,10 +188,8 @@ describe('<PasswordSection />', function () {
     render(<PasswordSection />)
     await screen.findByRole('heading', { name: 'Change password' })
     screen.getByText(
-      'You can’t add or change your password because your group or organization uses',
-      { exact: false }
+      'You can’t add or change your password because your group or organization uses LDAP or SSO.'
     )
-    screen.getByRole('link', { name: 'single sign-on (SSO)' })
   })
 })
 

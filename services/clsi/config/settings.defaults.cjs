@@ -34,6 +34,11 @@ module.exports = {
   pdftocairoImage:
     process.env.PDFTOCAIRO_IMAGE || 'quay.io/sharelatex/pdftocairo:24.02',
   enablePdfConversions: process.env.ENABLE_PDF_CONVERSIONS === 'true',
+  png2pdfImage:
+    process.env.PNG2PDF_IMAGE || 'quay.io/sharelatex/png2pdf:2026-06-24',
+  enablePng2pdfConversions: process.env.ENABLE_PNG2PDF_CONVERSIONS === 'true',
+  png2pdfMinFileSizeBytes:
+    parseInt(process.env.PNG2PDF_MIN_FILE_SIZE_BYTES, 10) || 1024 * 1024,
   maxUploadSize: 50 * 1024 * 1024,
   preciousFilePattern: process.env.PRECIOUS_FILE_PATTERN || '',
 
@@ -93,7 +98,9 @@ module.exports = {
   parallelFileDownloads:
     parseInt(process.env.FILESTORE_PARALLEL_FILE_DOWNLOADS, 10) || 1,
   filestoreDomainOveride: process.env.FILESTORE_DOMAIN_OVERRIDE,
-  texliveImageNameOveride: process.env.TEX_LIVE_DOCKER_IMAGE_ROOT,
+  texliveImageNameOveride:
+    process.env.TEX_LIVE_IMAGE_NAME_OVERRIDE ||
+    process.env.TEX_LIVE_DOCKER_IMAGE_ROOT,
   texliveOpenoutAny: process.env.TEXLIVE_OPENOUT_ANY,
   texliveMaxPrintLine: process.env.TEXLIVE_MAX_PRINT_LINE,
   enablePdfCaching: process.env.ENABLE_PDF_CACHING === 'true',
@@ -168,6 +175,13 @@ if ((process.env.DOCKER_RUNNER || process.env.SANDBOXED_COMPILES) === 'true') {
       synctex: { 'HostConfig.AutoRemove': true },
       'synctex-output': { 'HostConfig.AutoRemove': true },
       conversions: { 'HostConfig.AutoRemove': true },
+      // The png2pdf image is built FROM scratch and has no 'tex' user, so run
+      // it as the same uid/gid as this clsi process, which owns the cache files
+      // it converts in place.
+      png2pdf: {
+        'HostConfig.AutoRemove': true,
+        User: `${process.getuid()}:${process.getgid()}`,
+      },
     }
     module.exports.clsi.docker.compileGroupConfig = Object.assign(
       defaultCompileGroupConfig,
@@ -234,6 +248,12 @@ if ((process.env.DOCKER_RUNNER || process.env.SANDBOXED_COMPILES) === 'true') {
       'SANDBOXED_COMPILES enabled, but SANDBOXED_COMPILES_HOST_DIR_COMPILES not set'
     )
   }
+
+  // Host path of the clsi cache dir, so that the png2pdf conversion container
+  // (a sibling container started via the docker socket) can bind-mount a
+  // project's cache dir and convert downloaded PNGs in place.
+  module.exports.path.sandboxedCompilesHostDirCache =
+    process.env.SANDBOXED_COMPILES_HOST_DIR_CACHE
 
   module.exports.path.sandboxedCompilesHostDirOutput =
     process.env.SANDBOXED_COMPILES_HOST_DIR_OUTPUT ||
