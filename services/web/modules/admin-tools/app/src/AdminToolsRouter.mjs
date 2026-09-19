@@ -53,6 +53,10 @@ export default {
       AuthorizationMiddleware.ensureUserIsSiteAdmin,
       ProjectListController.getProjectsJson
     )
+    webRouter.post('/admin/projects',
+      AuthorizationMiddleware.ensureUserIsSiteAdmin,
+      ProjectListController.getProjectsJson
+    )
 
     webRouter.get('/admin/project',
       AuthorizationMiddleware.ensureUserIsSiteAdmin,

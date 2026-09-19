@@ -61,4 +61,9 @@ function TemplateGalleryPageContent() {
   )
 }
 
-export default withErrorBoundary(TemplateGalleryRoot, GenericErrorBoundaryFallback)
+export default withErrorBoundary(
+  TemplateGalleryRoot,
+  GenericErrorBoundaryFallback as React.ComponentType<
+    import('react-error-boundary').FallbackProps
+  >
+)

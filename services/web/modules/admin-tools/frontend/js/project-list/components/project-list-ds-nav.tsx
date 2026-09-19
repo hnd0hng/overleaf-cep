@@ -5,7 +5,6 @@ import ProjectsDropdown from './dropdown/projects-dropdown'
 import SortByDropdown from './dropdown/sort-by-dropdown'
 import ProjectTools from './table/project-tools/project-tools'
 import ProjectListTitle from './title/project-list-title'
-import LoadMore from './load-more'
 import OLCol from '@/shared/components/ol/ol-col'
 import OLRow from '@/shared/components/ol/ol-row'
 import { TableContainer } from '@/shared/components/table'
@@ -24,7 +23,6 @@ import ProjectListSummary from './project-list-summary'
 import { useActiveOverallTheme } from '@/shared/hooks/use-active-overall-theme'
 
 export function ProjectListDsNav() {
-
   const navbarProps = getMeta('ol-navbar')
   const footerProps = getMeta('ol-footer')
 
@@ -43,11 +41,13 @@ export function ProjectListDsNav() {
   const { getUserNameById } = useUserIdentityContext()
   const activeOverallTheme = useActiveOverallTheme()
 
-  const userName = projectsOwnerId ? getUserNameById(projectsOwnerId) : t('all_users')
+  const userName = projectsOwnerId
+    ? getUserNameById(projectsOwnerId)
+    : t('all_users')
   const tableTopArea = (
     <div className="pt-2 pb-3 d-md-none d-flex gap-3">
       <div className="pt-1 fs-5 fw-bold" translate="no">
-         {userName}
+        {userName}
       </div>
       <SearchForm
         inputValue={searchText}
@@ -115,7 +115,11 @@ export function ProjectListDsNav() {
                     <ProjectListSummary />
                   </div>
                   <div className="mt-3">
-                    <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+                    <Pagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={setCurrentPage}
+                    />
                   </div>
                 </div>
               </main>

@@ -46,10 +46,8 @@ describe('Features', function () {
 
   describe('hasFeature', function () {
     describe('without any settings', function () {
-      it('should return true', function (ctx) {
-        expect(ctx.Features.hasFeature('registration-page')).to.be.true
-      })
       it('should return false', function (ctx) {
+        expect(ctx.Features.hasFeature('registration-page')).to.be.false
         expect(ctx.Features.hasFeature('registration')).to.be.false
         expect(ctx.Features.hasFeature('affiliations')).to.be.false
         expect(ctx.Features.hasFeature('analytics')).to.be.false
@@ -64,6 +62,14 @@ describe('Features', function () {
       })
     })
     describe('with settings', function () {
+      describe('registration page enabled', function () {
+        beforeEach(function (ctx) {
+          ctx.settings.enableRegistrationPage = true
+        })
+        it('should return true', function (ctx) {
+          expect(ctx.Features.hasFeature('registration-page')).to.be.true
+        })
+      })
       describe('empty overleaf object', function () {
         beforeEach(function (ctx) {
           ctx.settings.overleaf = {}

@@ -20,7 +20,7 @@ import { User } from '../../../../../types/user/api'
 const flagActions = [
   { action: 'suspend', icon: 'pause', unfilled: false },
   { action: 'resume', icon: 'resume', unfilled: false },
-]
+] as const
 
 type ActionDropdownProps = {
   user: User
@@ -134,7 +134,7 @@ function ActionsDropdown({ user }: ActionDropdownProps) {
                 </li>
               )}
             </PurgeUserButton>
-            {(user.authMethods.includes('local') && !user.suspended) && ( 
+            {user.authMethods.includes('local') && !user.suspended && (
               <SendRegEmailButton user={user}>
                 {(text, handleOpenModal) => (
                   <li role="none">

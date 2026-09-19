@@ -489,10 +489,11 @@ export const FileTreeActionableProvider: FC<React.PropsWithChildren> = ({
     (entity: Omit<NewLinkedFileEntity, 'endpoint'>) => {
       const shouldReindexReferences = /\.bib$/.test(entity.name)
       return finishCreatingDocOrFile({ ...entity, endpoint: 'linked_file' }).
-        then(() => {
+        then(file => {
           if (shouldReindexReferences) {
             indexAllReferences(true)
           }
+          return file
         })
     },
     [finishCreatingDocOrFile]

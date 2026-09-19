@@ -25,16 +25,12 @@ export type GetProjectsRequestBody = {
   filters: Filters
 }
 
-export type UserRef = Pick<
-  User,
-  'id' | 'email' | 'firstName' | 'lastName'
->
-
+export type UserRef = Pick<User, 'id' | 'email' | 'firstName' | 'lastName'>
 
 export type ProjectApi = {
   id: string
   name: string
-  owner?: string
+  owner: string
   lastUpdated: Date
   lastUpdatedBy: string | null
   trashed: boolean

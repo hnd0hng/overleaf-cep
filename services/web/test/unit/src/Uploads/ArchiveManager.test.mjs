@@ -20,7 +20,7 @@ describe('ArchiveManager', function () {
     ctx.zipfile.readEntry = sinon.stub()
     ctx.zipfile.close = sinon.stub()
 
-    ctx.Settings = {}
+    ctx.Settings = { maxUploadSize: 50 * 1024 * 1024 }
     vi.doMock('@overleaf/settings', () => ({
       default: ctx.Settings,
     }))

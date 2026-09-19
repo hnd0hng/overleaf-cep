@@ -1,15 +1,9 @@
 import { useTranslation } from 'react-i18next'
-import { useState, useEffect } from 'react'
+import { FormEventHandler, useState, useEffect } from 'react'
 import useAsync from '@/shared/hooks/use-async'
 import { debugConsole } from '@/utils/debugging'
-import {
-  getJSON,
-  postJSON
-} from '@/infrastructure/fetch-json'
-import {
-  OLModalBody,
-  OLModalFooter,
-} from '@/shared/components/ol/ol-modal'
+import { getJSON, postJSON } from '@/infrastructure/fetch-json'
+import { OLModalBody, OLModalFooter } from '@/shared/components/ol/ol-modal'
 import OLNotification from '@/shared/components/ol/ol-notification'
 import OLButton from '@/shared/components/ol/ol-button'
 import OLForm from '@/shared/components/ol/ol-form'
@@ -38,7 +32,7 @@ const GitSyncExportModal = ({
   projectId,
   projectName,
   handleHide,
-  setModalStatus
+  setModalStatus,
 }: GitSyncExportModalProps) => {
   const { t } = useTranslation()
 
@@ -51,35 +45,50 @@ const GitSyncExportModal = ({
   const {
     runAsync: runAsyncUserAndOrgs,
     data: userAndOrgs,
-    error: errorUserAndOrgs
+    error: errorUserAndOrgs,
+    isLoading: isLoadingUserAndOrgs,
   } = useAsync<OrgsResponse>()
 
   useEffect(() => {
     runAsyncUserAndOrgs(getJSON('/user/github-sync/orgs'))
       .then(userAndOrgs => setSelectedOwner(userAndOrgs?.user))
-      .catch(err => debugConsole.error(err?.data?.message || err?.message || err))
+      .catch(err =>
+        debugConsole.error(err?.data?.message || err?.message || err)
+      )
   }, [])
 
   const { isLoading, error, setError, runAsync } = useAsync<void>()
 
   const createRepo = () => {
+    if (!userAndOrgs?.user || !selectedOwner) return
+
     const isPublic = visibility === 'public'
     const org = selectedOwner === userAndOrgs?.user ? undefined : selectedOwner
 
-    runAsync(postJSON(`/project/${projectId}/github-sync/export`, {
-      body: {
-        name: repoName,
-        description,
-        isPublic,
-        org,
-      },
-    }))
+    runAsync(
+      postJSON(`/project/${projectId}/github-sync/export`, {
+        body: {
+          name: repoName,
+          description,
+          isPublic,
+          org,
+        },
+      })
+    )
       .then(() => setModalStatus('loading'))
       .catch(err => {
         debugConsole.error(err?.data?.message || err?.message || err)
-        if (!err?.data?.key) setError(t('something_went_wrong_server'))
-        else setError(t(err.data.key))
+        if (!err?.data?.key) {
+          setError(new Error(t('something_went_wrong_server')))
+        } else {
+          setError(new Error(t(err.data.key)))
+        }
       })
+  }
+
+  const handleSubmit: FormEventHandler<HTMLFormElement> = event => {
+    event.preventDefault()
+    createRepo()
   }
 
   return (
@@ -88,12 +97,7 @@ const GitSyncExportModal = ({
         <h4>{t('export_project_to_github')}</h4>
         <p>{t('project_not_linked_to_github')}</p>
 
-        {error && (
-          <OLNotification
-            type="error"
-            content={error}
-          />
-        )}
+        {error && <OLNotification type="error" content={error.message} />}
 
         {errorUserAndOrgs && (
           <OLNotification
@@ -102,7 +106,7 @@ const GitSyncExportModal = ({
           />
         )}
 
-        <OLForm onSubmit={createRepo}>
+        <OLForm id="github-sync-export-form" onSubmit={handleSubmit}>
           <OLRow>
             <OLCol xs={4}>
               <OLFormGroup>
@@ -115,6 +119,9 @@ const GitSyncExportModal = ({
                   id="github-sync-owner"
                   name="org"
                   value={selectedOwner}
+                  disabled={
+                    isLoadingUserAndOrgs || Boolean(errorUserAndOrgs)
+                  }
                   onChange={e => setSelectedOwner(e.target.value)}
                 >
                   <option key={userAndOrgs?.user} value={userAndOrgs?.user}>
@@ -206,17 +213,22 @@ const GitSyncExportModal = ({
       </OLModalBody>
 
       <OLModalFooter>
-        <OLButton
-          variant="secondary"
-          onClick={handleHide}
-        >
+        <OLButton variant="secondary" onClick={handleHide}>
           {t('cancel')}
         </OLButton>
 
         <OLButton
           variant="primary"
-          onClick={createRepo}
-          disabled={!repoName.trim() || isLoading}
+          type="submit"
+          form="github-sync-export-form"
+          disabled={
+            !repoName.trim() ||
+            isLoading ||
+            isLoadingUserAndOrgs ||
+            !userAndOrgs?.user ||
+            !selectedOwner ||
+            Boolean(errorUserAndOrgs)
+          }
           isLoading={isLoading}
         >
           {t('create_project_in_github')}

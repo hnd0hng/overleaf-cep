@@ -1,11 +1,10 @@
 import React, { useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
 import getMeta from '@/utils/meta'
 import SettingsMenuSelect from './settings-menu-select'
 import type { Option } from './settings-menu-select'
 
 interface SettingsTemplateCategoryProps {
-  value: string
+  value?: string
   onChange: (value: string) => void
 }
 
@@ -13,8 +12,6 @@ const SettingsTemplateCategory: React.FC<SettingsTemplateCategoryProps> = ({
   value,
   onChange,
 }) => {
-  const { t } = useTranslation()
-
   const options: Option[] = useMemo(() => {
     const { templateLinks = [] } = getMeta('ol-ExposedSettings') as {
       templateLinks?: Array<{ name: string; url: string; description: string }>
@@ -33,7 +30,6 @@ const SettingsTemplateCategory: React.FC<SettingsTemplateCategoryProps> = ({
   return (
     <SettingsMenuSelect
       name="category"
-      label={`${t('category')}:`}
       value={value}
       onChange={onChange}
       options={options}

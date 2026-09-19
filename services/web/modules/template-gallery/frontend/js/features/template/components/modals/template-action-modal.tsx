@@ -18,7 +18,7 @@ import { useFocusTrap } from '../../hooks/use-focus-trap'
 
 type TemplateActionModalProps = {
   title: string
-  size?: string
+  size?: 'sm' | 'lg'
   action: 'delete' | 'edit'
   actionHandler: (template: Template) => Promise<void>
   handleCloseModal: () => void
@@ -46,7 +46,9 @@ function TemplateActionModal({
   onClearError,
 }: TemplateActionModalProps) {
   const { t } = useTranslation()
-  const [error, setError] = useState<false | { name: string; error: unknown }>(false)
+  const [error, setError] = useState<false | { name: string; error: unknown }>(
+    false
+  )
   const [isProcessing, setIsProcessing] = useState(false)
   const isMounted = useIsMounted()
   const modalRef = useRef<HTMLDivElement>(null)
@@ -111,7 +113,7 @@ function TemplateActionModal({
             <Notification
               type="error"
               title={error.name}
-              content={getUserFacingMessage(error.error) as string}
+              content={getUserFacingMessage(error.error as Error)}
             />
           )}
         </OLModalBody>

@@ -11,7 +11,6 @@ import {
   DropdownMenu,
   DropdownToggle,
 } from '@/shared/components/dropdown/dropdown-menu'
-import BackToUserList from '../back-to-user-list'
 import ProjectsFilterMenu from '../projects-filter-menu'
 
 type ItemProps = {

@@ -1,8 +1,8 @@
 import { useTranslation } from 'react-i18next'
 import { useDetachCompileContext as useCompileContext } from '@/shared/context/detach-compile-context'
 import { useMemo } from 'react'
-import DropdownSetting from '../dropdown-setting'
-import { useSetCompilationSettingWithEvent } from '@/features/editor-left-menu/hooks/use-set-compilation-setting'
+import DropdownSetting from '@/features/ide-settings/components/dropdown-setting'
+import { useSetCompilationSettingWithEvent } from '@/features/ide-settings/hooks/use-set-compilation-setting'
 
 export default function DraftSetting() {
   const { draft, setDraft } = useCompileContext()

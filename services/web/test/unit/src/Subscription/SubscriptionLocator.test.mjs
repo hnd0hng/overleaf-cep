@@ -48,6 +48,13 @@ describe('Subscription Locator Tests', function () {
       SSOConfig: ctx.SSOConfig,
     }))
 
+    ctx.Features = {
+      hasFeature: sinon.stub().withArgs('saas').returns(true),
+    }
+    vi.doMock('../../../../app/src/infrastructure/Features', () => ({
+      default: ctx.Features,
+    }))
+
     ctx.isProfessionalGroupPlan = sinon.stub()
     vi.doMock('../../../../app/src/Features/Subscription/PlansHelper', () => ({
       isProfessionalGroupPlan: subscription =>

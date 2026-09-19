@@ -11,7 +11,7 @@ import {
 import OLButton from '@/shared/components/ol/ol-button'
 
 type Props = {
-  show: bool
+  show: boolean
   handleHide: () => void
   projectId: string
 }
@@ -47,8 +47,8 @@ export default function GitModal({
               {gitCloneCommand}
             </code>
           </span>
-          <CopyToClipboard 
-            content={gitCloneCommand} 
+          <CopyToClipboard
+            content={gitCloneCommand}
             tooltipId="git-copy-clone-project-command-tooltip"
             kind={'button'}
           />

@@ -1,7 +1,8 @@
 import { memo } from 'react'
 import { cleanHtml } from '../../../../../app/src/CleanHtml.mjs'
+import type { Template } from '../../../../../types/template'
 
-function TemplateGalleryEntry({ template }) {
+function TemplateGalleryEntry({ template }: { template: Template }) {
   return (
     <div className={"gallery-thumbnail col-12 col-md-6 col-lg-4"}>
       <a href={`/template/${template.id}`} className="thumbnail-link">

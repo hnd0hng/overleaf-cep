@@ -10,7 +10,7 @@ import { performUpdateUser, PostActions } from '../../../../util/user-actions'
 
 type FlagUserButtonProps = {
   user: User
-  action: string
+  action: 'set_admin' | 'unset_admin' | 'suspend' | 'resume'
   children: (text: string, handleOpenModal: () => void) => React.ReactElement
 }
 
@@ -32,13 +32,16 @@ function FlagUserButton({ user, action, children }: FlagUserButtonProps) {
 
   const { toggleSelectedUser, updateUserViewData } = useUserListContext()
   const postActions: PostActions = { toggleSelectedUser, updateUserViewData }
-  const handleFlagUser = useCallback((user: User, options: any) => {
-    return performUpdateUser(user, postActions, options)
-  }, [postActions])
+  const handleFlagUser = useCallback(
+    (user: User, options: any) => {
+      return performUpdateUser(user, postActions, options)
+    },
+    [postActions]
+  )
 
   if (user.deleted) return null
-  if (action === "suspend" && user.suspended) return null
-  if (action === "resume" && !user.suspended) return null
+  if (action === 'suspend' && user.suspended) return null
+  if (action === 'resume' && !user.suspended) return null
 
   return (
     <>
@@ -57,22 +60,22 @@ function FlagUserButton({ user, action, children }: FlagUserButtonProps) {
 }
 
 const FlagUserButtonTooltip = memo(function FlagUserButtonTooltip({
-  user, flag
-}: Pick<FlagUserButtonProps, 'user' | 'flag'>) {
-
-  let action
+  user,
+  flag,
+}: {
+  user: User
+  flag: 'isAdmin' | 'suspended'
+}) {
+  let action: FlagUserButtonProps['action']
   let icon
-  let unfilled
   switch (flag) {
     case 'isAdmin':
       action = user.isAdmin ? 'unset_admin' : 'set_admin'
       icon = user.isAdmin ? 'remove_moderator' : 'add_moderator'
-      unfilled = true
       break
     case 'suspended':
       action = user.suspended ? 'resume' : 'suspend'
       icon = user.suspended ? 'resume' : 'pause'
-      unfilled = false
       break
     default:
       return null
@@ -93,7 +96,6 @@ const FlagUserButtonTooltip = memo(function FlagUserButtonTooltip({
             accessibilityLabel={text}
             className="action-btn"
             icon={icon}
-            unfilled={unfilled}
           />
         </OLTooltip>
       )}

@@ -67,4 +67,9 @@ function TemplatePageContent() {
   )
 }
 
-export default withErrorBoundary(TemplateRoot, GenericErrorBoundaryFallback)
+export default withErrorBoundary(
+  TemplateRoot,
+  GenericErrorBoundaryFallback as React.ComponentType<
+    import('react-error-boundary').FallbackProps
+  >
+)

@@ -6,11 +6,10 @@ import useIsMounted from '@/shared/hooks/use-is-mounted'
 import { useUserListContext } from '../../../../context/user-list-context'
 import { User } from '../../../../../../../types/user/api'
 import SendRegEmailModal from '../../../modals/send-reg-email-modal'
-import { performSendRegEmail } from '../../../../util/user-actions'
+import { performSendRegEmail, PostActions } from '../../../../util/user-actions'
 
-function SendRegEmailsButton({ action }: { action: string }) {
-  const { selectedUsers, toggleSelectedUser } =
-    useUserListContext()
+function SendRegEmailsButton({ action = 'resend' }: { action?: 'resend' }) {
+  const { selectedUsers, toggleSelectedUser } = useUserListContext()
   const { t } = useTranslation()
   const text = t(action)
 
@@ -44,7 +43,6 @@ function SendRegEmailsButton({ action }: { action: string }) {
           variant="secondary"
           accessibilityLabel={text}
           icon={'mail'}
-          unfilled={true}
         />
       </OLTooltip>
       {showModal && (

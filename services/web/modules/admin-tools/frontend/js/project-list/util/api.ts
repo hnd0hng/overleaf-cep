@@ -1,7 +1,4 @@
-import {
-  GetProjectsResponseBody,
-  Sort,
-} from '../../../../types/project/api'
+import { GetProjectsResponseBody, Sort } from '../../../../types/project/api'
 import { deleteJSON, postJSON } from '@/infrastructure/fetch-json'
 
 export type TransferOwnershipOptions = {
@@ -9,14 +6,14 @@ export type TransferOwnershipOptions = {
   skipEmails: boolean
 }
 
-export function getProjects( 
-  params: { 
-    userId: string, 
-    by: Sort['by']
-    order: Sort['order']
-  }): Promise<GetProjectsResponseBody> {
+export function getProjects(params: {
+  userId: string | null
+  by: Sort['by']
+  order: Sort['order']
+}): Promise<GetProjectsResponseBody> {
   const { userId, ...sort } = params
-  return postJSON(`/admin/user/${userId}/projects`, { body: { sort } })
+  const url = userId ? `/admin/user/${userId}/projects` : '/admin/projects'
+  return postJSON(url, { body: { sort } })
 }
 
 export function deleteProject(projectId: string) {
@@ -38,6 +35,11 @@ export function trashProjectForUser(projectId: string, userId: string) {
 export function untrashProjectForUser(projectId: string, userId: string) {
   return postJSON(`/admin/project/${projectId}/untrash`, { body: { userId } })
 }
-export function transferProjectOwnership(projectId: string, options: TransferOwnershipOptions) {
-  return postJSON(`/project/${projectId}/transfer-ownership`, { body: { ...options } })
+export function transferProjectOwnership(
+  projectId: string,
+  options: TransferOwnershipOptions
+) {
+  return postJSON(`/project/${projectId}/transfer-ownership`, {
+    body: { ...options },
+  })
 }

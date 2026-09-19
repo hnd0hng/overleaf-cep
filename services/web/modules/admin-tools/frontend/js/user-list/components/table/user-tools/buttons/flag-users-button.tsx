@@ -8,7 +8,9 @@ import { User } from '../../../../../../../types/user/api'
 import FlagUserModal from '../../../modals/flag-user-modal'
 import { performUpdateUser, PostActions } from '../../../../util/user-actions'
 
-function FlagUsersButton({ action }: { action: string }) {
+type FlagAction = 'set_admin' | 'unset_admin' | 'suspend' | 'resume'
+
+function FlagUsersButton({ action }: { action: FlagAction }) {
   const { selectedUsers, toggleSelectedUser, updateUserViewData } =
     useUserListContext()
   const { t } = useTranslation()
@@ -33,23 +35,18 @@ function FlagUsersButton({ action }: { action: string }) {
   }
 
   let icon
-  let unfilled
   switch (action) {
     case 'set_admin':
       icon = 'add_moderator'
-      unfilled = true
       break
     case 'unset_admin':
       icon = 'remove_moderator'
-      unfilled = true
       break
     case 'suspend':
       icon = 'pause'
-      unfilled = false
       break
     case 'resume':
       icon = 'resume'
-      unfilled = false
       break
     default:
       return null
@@ -67,7 +64,6 @@ function FlagUsersButton({ action }: { action: string }) {
           variant="secondary"
           accessibilityLabel={text}
           icon={icon}
-          unfilled={unfilled}
         />
       </OLTooltip>
       {showModal && (

@@ -1,6 +1,10 @@
-import { User } from '../../../../types/user/api'
-export function getUserName(user: User) {
+type NamedUser = {
+  firstName?: string
+  lastName?: string
+  email?: string
+}
 
+export function getUserName(user?: NamedUser | null) {
   if (!user) return '[N/A]'
 
   const { firstName, lastName, email } = user

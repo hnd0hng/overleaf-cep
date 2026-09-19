@@ -117,6 +117,7 @@ describe('ProjectController', function () {
     ctx.EditorController = {
       promises: {
         renameProject: sinon.stub().resolves(),
+        setImageName: sinon.stub().resolves(),
       },
     }
     ctx.InactiveProjectManager = {

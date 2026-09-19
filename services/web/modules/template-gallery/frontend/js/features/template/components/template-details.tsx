@@ -12,72 +12,84 @@ import { licensesMap } from './settings/settings-license'
 
 function TemplateDetails() {
   const { t } = useTranslation()
-  const {template, setTemplate} = useTemplateContext()
+  const { template } = useTemplateContext()
   const lastUpdatedDate = fromNowDate(template.lastUpdated)
   const tooltipText = formatDate(template.lastUpdated)
   const loggedInUserId = getMeta('ol-user_id')
-  const loggedInUserCanManageTemplates = getMeta('ol-userIsAdmin')
-                                      || getMeta('ol-userIsTemplatesManager')
+  const loggedInUserCanManageTemplates =
+    getMeta('ol-userIsAdmin') || getMeta('ol-userIsTemplatesManager')
 
   const openAsTemplateParams = new URLSearchParams({
     version: template.version,
-    ...(template.brandVariationId && { brandVariationId: template.brandVariationId }),
+    ...(template.brandVariationId && {
+      brandVariationId: template.brandVariationId,
+    }),
     name: template.name,
-    compiler: template.compiler,
-    mainFile: template.mainFile,
-    language: template.language,
-    ...(template.imageName && { imageName: template.imageName })
+    ...(template.compiler && { compiler: template.compiler }),
+    ...(template.mainFile && { mainFile: template.mainFile }),
+    ...(template.language && { language: template.language }),
+    ...(template.imageName && { imageName: template.imageName }),
   }).toString()
 
-  const sanitizedAuthor = cleanHtml(template.author, 'linksOnly') || t('anonymous')
+  const sanitizedAuthor =
+    cleanHtml(template.author, 'linksOnly') || t('anonymous')
   const sanitizedDescription = cleanHtml(template.description, 'reachText')
 
   return (
     <>
-    <OLRow>
-      <OLCol md={12}>
-        <div className={"gallery-item-title"}>
-          <h1 className="h2">{template.name}</h1>
-        </div>
-      </OLCol>
-    </OLRow>
-    <OLRow className="cta-links-container">
-      <OLCol md={12} className="cta-links">
-        <a className="btn btn-primary cta-link" href={`/project/new/template/${template.id}?${openAsTemplateParams}`}>{t('open_as_template')}</a>
-        <a className="btn btn-secondary cta-link" href={`/template/${template.id}/preview?version=${template.version}`}>{t('view_pdf')}</a>
-      </OLCol>
-    </OLRow>
-    <div className="template-details-container">
-      <div className="template-detail">
-        <div>
-          <b>{t('author')}:</b>
-        </div>
-        <div dangerouslySetInnerHTML={{ __html: sanitizedAuthor }} />
-      </div>
-      <div className="template-detail">
-        <div>
-          <b>{t('last_updated')}:</b>
-        </div>
-        <div>
-          <OLTooltip
-            id={`${template.id}`}
-            description={tooltipText}
-            overlayProps={{ placement: 'bottom', trigger: ['hover', 'focus'] }}
+      <OLRow>
+        <OLCol md={12}>
+          <div className={'gallery-item-title'}>
+            <h1 className="h2">{template.name}</h1>
+          </div>
+        </OLCol>
+      </OLRow>
+      <OLRow className="cta-links-container">
+        <OLCol md={12} className="cta-links">
+          <a
+            className="btn btn-primary cta-link"
+            href={`/project/new/template/${template.id}?${openAsTemplateParams}`}
           >
-            <span>
-              {lastUpdatedDate.trim()}
-            </span>
-          </OLTooltip>
+            {t('open_as_template')}
+          </a>
+          <a
+            className="btn btn-secondary cta-link"
+            href={`/template/${template.id}/preview?version=${template.version}`}
+          >
+            {t('view_pdf')}
+          </a>
+        </OLCol>
+      </OLRow>
+      <div className="template-details-container">
+        <div className="template-detail">
+          <div>
+            <b>{t('author')}:</b>
+          </div>
+          <div dangerouslySetInnerHTML={{ __html: sanitizedAuthor }} />
         </div>
-      </div>
-      <div className="template-detail">
-        <div>
-          <b>{t('license')}:</b>
+        <div className="template-detail">
+          <div>
+            <b>{t('last_updated')}:</b>
+          </div>
+          <div>
+            <OLTooltip
+              id={`${template.id}`}
+              description={tooltipText}
+              overlayProps={{
+                placement: 'bottom',
+                trigger: ['hover', 'focus'],
+              }}
+            >
+              <span>{lastUpdatedDate.trim()}</span>
+            </OLTooltip>
+          </div>
         </div>
-        <div>
-          {licensesMap[template.license]}
+        <div className="template-detail">
+          <div>
+            <b>{t('license')}:</b>
+          </div>
+          <div>{licensesMap[template.license as keyof typeof licensesMap]}</div>
         </div>
-      </div>
         {sanitizedDescription && (
           <div className="template-detail">
             <div>
@@ -86,19 +98,21 @@ function TemplateDetails() {
             <div
               className="gallery-abstract"
               data-ol-mathjax=""
-              dangerouslySetInnerHTML={{ __html: sanitizedDescription }}>
-            </div>
+              dangerouslySetInnerHTML={{ __html: sanitizedDescription }}
+            ></div>
           </div>
         )}
-    </div>
-    {loggedInUserId && (loggedInUserId === template.owner || loggedInUserCanManageTemplates) && (
-      <OLRow className="cta-links-container">
-        <OLCol md={12} className="text-end">
-          <EditTemplateButton />
-          <DeleteTemplateButton />
-        </OLCol>
-      </OLRow>
-    )}
+      </div>
+      {loggedInUserId &&
+        (loggedInUserId === template.owner ||
+          loggedInUserCanManageTemplates) && (
+          <OLRow className="cta-links-container">
+            <OLCol md={12} className="text-end">
+              <EditTemplateButton />
+              <DeleteTemplateButton />
+            </OLCol>
+          </OLRow>
+        )}
     </>
   )
 }

@@ -11,14 +11,16 @@ import OLFormLabel from '@/shared/components/ol/ol-form-label'
 import OLFormSelect from '@/shared/components/ol/ol-form-select'
 import OLNotification from '@/shared/components/ol/ol-notification'
 
-type ZoteroGroup = {
+export type ZoteroGroup = {
   id: string
   name: string
 }
 
 type FileTreeImportFromZoteroProps = { groups: ZoteroGroup[] }
 
-export default function FileTreeImportFromZotero({ groups }: FileTreeImportFromZoteroProps) {
+export default function FileTreeImportFromZotero({
+  groups,
+}: FileTreeImportFromZoteroProps) {
   const { t } = useTranslation()
   const { name, setName } = useFileTreeCreateName()
   const { setValid } = useFileTreeCreateForm()
@@ -40,21 +42,25 @@ export default function FileTreeImportFromZotero({ groups }: FileTreeImportFromZ
     finishCreatingLinkedFile({
       name,
       provider: 'zotero',
-      data: { zoteroGroupId: selectedGroupId, bibFormat: selectedFormat }
+      data: { zoteroGroupId: selectedGroupId, bibFormat: selectedFormat },
     })
   }
 
   return (
     <>
-    <p>{t('import_a_bibtex_file_from_your_provider_account', { provider: 'Zotero' })}</p>
-    <form
-      className="form-controls"
-      id="create-file"
-      noValidate
-      onSubmit={handleSubmit}
-    >
-      <OLFormGroup controlId="zotero-library-select">
-        <OLFormLabel>{t('library')}</OLFormLabel>
+      <p>
+        {t('import_a_bibtex_file_from_your_provider_account', {
+          provider: 'Zotero',
+        })}
+      </p>
+      <form
+        className="form-controls"
+        id="create-file"
+        noValidate
+        onSubmit={handleSubmit}
+      >
+        <OLFormGroup controlId="zotero-library-select">
+          <OLFormLabel>{t('library')}</OLFormLabel>
           <OLFormSelect
             id="zotero-library-select"
             value={selectedGroupId}
@@ -70,17 +76,17 @@ export default function FileTreeImportFromZotero({ groups }: FileTreeImportFromZ
               </option>
             ))}
           </OLFormSelect>
-      </OLFormGroup>
+        </OLFormGroup>
 
-      <FileTreeCreateNameInput
-        label={t('file_name_in_this_project')}
-        placeholder="zotero.bib"
-        error={error}
-        inFlight={inFlight}
-      />
+        <FileTreeCreateNameInput
+          label={t('file_name_in_this_project')}
+          placeholder="zotero.bib"
+          error={error}
+          inFlight={inFlight}
+        />
 
-      <OLFormGroup controlId="zotero-format-select">
-        <OLFormLabel>{t('format')}</OLFormLabel>
+        <OLFormGroup controlId="zotero-format-select">
+          <OLFormLabel>{t('format')}</OLFormLabel>
           <OLFormSelect
             id="zotero-format-select"
             value={selectedFormat}
@@ -92,21 +98,23 @@ export default function FileTreeImportFromZotero({ groups }: FileTreeImportFromZ
             <option value="bibtex">{'BibTeX'}</option>
             <option value="biblatex">{'BibLaTeX'}</option>
           </OLFormSelect>
-      </OLFormGroup>
+        </OLFormGroup>
 
-      {inFlight && (
-        <div role="status" className="loading d-flex justify-content-center align-items-center fs-5">
+        {inFlight && (
           <div
-            aria-hidden="true"
-            className="spinner-border spinner-border-sm"
-          ></div>
-          {t('importing') + '…'}
-        </div>
-      )}
+            role="status"
+            className="loading d-flex justify-content-center align-items-center fs-5"
+          >
+            <div
+              aria-hidden="true"
+              className="spinner-border spinner-border-sm"
+            ></div>
+            {t('importing') + '…'}
+          </div>
+        )}
 
-      {error && <ErrorMessage error={error} />}
-
-    </form>
+        {error && <ErrorMessage error={error} />}
+      </form>
     </>
   )
 }

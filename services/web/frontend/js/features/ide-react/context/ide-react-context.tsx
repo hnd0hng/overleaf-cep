@@ -8,6 +8,7 @@ import React, {
   useCallback,
 } from 'react'
 import { ReactScopeValueStore } from '@/features/ide-react/scope-value-store/react-scope-value-store'
+import { ReactScopeEventEmitter } from '@/features/ide-react/scope-event-emitter/react-scope-event-emitter'
 import { IdeProvider } from '@/shared/context/ide-context'
 import {
   createIdeEventEmitter,
@@ -48,6 +49,9 @@ export const IdeReactProvider: FC<React.PropsWithChildren> = ({ children }) => {
   const [permissionsLevel, setPermissionsLevel] =
     useState<PermissionsLevel>('readOnly')
   const [outOfSync, setOutOfSync] = useState(false)
+  const [scopeEventEmitter] = useState(
+    () => new ReactScopeEventEmitter(eventEmitter)
+  )
   const [unstableStore] = useState(() => {
     const store = new ReactScopeValueStore()
     // Add dummy editor.ready key for Writefull, that relies on this calling
@@ -169,7 +173,11 @@ export const IdeReactProvider: FC<React.PropsWithChildren> = ({ children }) => {
 
   return (
     <IdeReactContext.Provider value={value}>
-      <IdeProvider ide={ide} unstableStore={unstableStore}>
+      <IdeProvider
+        ide={ide}
+        scopeEventEmitter={scopeEventEmitter}
+        unstableStore={unstableStore}
+      >
         {children}
       </IdeProvider>
     </IdeReactContext.Provider>

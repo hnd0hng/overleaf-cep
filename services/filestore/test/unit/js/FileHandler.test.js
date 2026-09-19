@@ -20,6 +20,8 @@ describe('FileHandler', () => {
   const convertedFolderKey = `${new ObjectId()}/${new ObjectId()}`
   const sourceStream = 'sourceStream'
   const convertedKey = 'convertedKey'
+  const originalFsPath = '/tmp/original-file'
+  const convertedFsPath = '/tmp/converted-file.png'
   const redirectUrl = 'https://wombat.potato/giraffe'
   const readStream = {
     stream: 'readStream',
@@ -41,15 +43,15 @@ describe('FileHandler', () => {
       // the callback style is used for detached cleanup calls
       deleteFile: sinon.stub().yields(),
       promises: {
-        writeStream: sinon.stub().resolves(),
+        writeStream: sinon.stub().resolves(originalFsPath),
         deleteFile: sinon.stub().resolves(),
       },
     }
     FileConverter = {
       promises: {
-        convert: sinon.stub().resolves(),
-        thumbnail: sinon.stub().resolves(),
-        preview: sinon.stub().resolves(),
+        convert: sinon.stub().resolves(convertedFsPath),
+        thumbnail: sinon.stub().resolves(convertedFsPath),
+        preview: sinon.stub().resolves(convertedFsPath),
       },
     }
     KeyBuilder = {

@@ -12,8 +12,8 @@ export const defaultComparator = (
   v2: Template,
   key: 'name' | 'lastUpdated'
 ) => {
-  const value1 = v1[key].toLowerCase()
-  const value2 = v2[key].toLowerCase()
+  const value1 = String(v1[key]).toLowerCase()
+  const value2 = String(v2[key]).toLowerCase()
 
   if (value1 !== value2) {
     return value1 < value2 ? Compare.SORT_A_BEFORE_B : Compare.SORT_A_AFTER_B

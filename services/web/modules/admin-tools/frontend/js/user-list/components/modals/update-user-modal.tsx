@@ -13,12 +13,18 @@ import OLButton from '@/shared/components/ol/ol-button'
 import OLRow from '@/shared/components/ol/ol-row'
 import OLCol from '@/shared/components/ol/ol-col'
 import { useRefWithAutoFocus } from '@/shared/hooks/use-ref-with-auto-focus'
+import type { User } from '../../../../../types/user/api'
 
 type UpdateUserModalProps = Pick<
   React.ComponentProps<typeof UsersActionModal>,
   'users' | 'actionHandler' | 'showModal' | 'handleCloseModal'
 >
-const pickUserFields = ({ firstName, lastName, email, isAdmin }) => ({ firstName, lastName, email, isAdmin })
+const pickUserFields = ({ firstName, lastName, email, isAdmin }: User) => ({
+  firstName,
+  lastName,
+  email,
+  isAdmin,
+})
 
 function UpdateUserModal({
   users,
@@ -66,7 +72,7 @@ function UpdateUserModal({
         <OLFormLabel>{t('email_address')}</OLFormLabel>
         <OLFormControl
           ref={autoFocusedRef}
-          maxLength="128"
+          maxLength={128}
           autoComplete="off"
           type="text"
           name="email"
@@ -77,7 +83,7 @@ function UpdateUserModal({
       <OLFormGroup controlId="first-name">
         <OLFormLabel>{t('first_name')}</OLFormLabel>
         <OLFormControl
-          maxLength="128"
+          maxLength={128}
           autoComplete="off"
           type="text"
           name="firstName"
@@ -89,7 +95,7 @@ function UpdateUserModal({
       <OLFormGroup controlId="last-name">
         <OLFormLabel>{t('last_name')}</OLFormLabel>
         <OLFormControl
-          maxLength="128"
+          maxLength={128}
           autoComplete="off"
           type="text"
           name="lastName"

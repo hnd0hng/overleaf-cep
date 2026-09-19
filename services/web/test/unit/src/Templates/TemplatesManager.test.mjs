@@ -114,6 +114,9 @@ describe('TemplatesManager', function () {
         siteUrl: (ctx.siteUrl = 'http://127.0.0.1:3000'),
         defaultLatexCompiler: 'pdflatex',
         apis: {
+          filestore: {
+            url: (ctx.filestoreUrl = 'http://filestore'),
+          },
           v1: {
             url: (ctx.v1Url = 'http://overleaf.com'),
             user: 'overleaf',
@@ -150,8 +153,6 @@ describe('TemplatesManager', function () {
     }))
 
     ctx.TemplatesManager = (await import(modulePath)).default.promises
-    ctx.zipUrl =
-      '%2Ftemplates%2F52fb86a81ae1e566597a25f6%2Fv%2F4%2Fzip&templateName=Moderncv%20Banking&compiler=pdflatex'
   })
 
   describe('createProjectFromV1Template', function () {
@@ -169,9 +170,9 @@ describe('TemplatesManager', function () {
         )
       })
 
-      it('should fetch zip from v1 based on template id', function (ctx) {
+      it('should fetch the template zip from filestore', function (ctx) {
         ctx.FetchUtils.fetchStreamWithResponse.should.have.been.calledWith(
-          `${ctx.v1Url}/api/v1/overleaf/templates/${ctx.templateVersionId}`
+          `${ctx.filestoreUrl}/template/${ctx.templateId}/v/${ctx.templateVersionId}/zip`
         )
       })
 
@@ -185,8 +186,6 @@ describe('TemplatesManager', function () {
           ctx.templateName,
           ctx.dumpPath,
           {
-            fromV1TemplateId: ctx.templateId,
-            fromV1TemplateVersionId: ctx.templateVersionId,
             compiler: ctx.compiler,
             imageName: ctx.imageName,
             brandVariationId: ctx.brandVariationId,
@@ -226,10 +225,8 @@ describe('TemplatesManager', function () {
           ctx.templateName,
           ctx.dumpPath,
           {
-            fromV1TemplateId: ctx.templateId,
-            fromV1TemplateVersionId: ctx.templateVersionId,
             compiler: 'pdflatex',
-            imageName: 'wl_texlive:2018.1',
+            imageName: null,
           }
         )
       })

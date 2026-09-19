@@ -9,6 +9,7 @@ import { useFileTreeActionable } from '@/features/file-tree/contexts/file-tree-a
 import FileTreeModalCreateFileMode from '@/features/file-tree/components/file-tree-create/file-tree-modal-create-file-mode'
 import FileTreeCreateNameProvider from '@/features/file-tree/contexts/file-tree-create-name'
 import FileTreeImportFromZotero from './file-tree-import-from-zotero'
+import type { ZoteroGroup } from './file-tree-import-from-zotero'
 
 export function CreateFileMode() {
   const { t } = useTranslation()
@@ -36,10 +37,9 @@ export function CreateFilePane() {
   } = useAsync<ZoteroGroup[]>()
 
   const loadGroups = useCallback(() => {
-    return runAsync(getJSON('/user/zotero/groups'))
-      .catch(err => {
-        debugConsole.error(err?.data?.message || err?.message || err)
-      })
+    return runAsync(getJSON('/user/zotero/groups')).catch(err => {
+      debugConsole.error(err?.data?.message || err?.message || err)
+    })
   }, [runAsync])
 
   useEffect(() => {
@@ -66,8 +66,11 @@ export function CreateFilePane() {
   if (isGroupsLoading) {
     return (
       <>
-        <br/>
-        <div role="status" className="loading d-flex justify-content-center align-items-center fs-5">
+        <br />
+        <div
+          role="status"
+          className="loading d-flex justify-content-center align-items-center fs-5"
+        >
           <div
             aria-hidden="true"
             className="spinner-border spinner-border-sm"
@@ -80,14 +83,12 @@ export function CreateFilePane() {
     if (groups) {
       return (
         <FileTreeCreateNameProvider initialName="zotero.bib">
-          <FileTreeImportFromZotero
-            groups={groups}
-          />
+          <FileTreeImportFromZotero groups={groups} />
         </FileTreeCreateNameProvider>
       )
     } else {
       return (
-        <div className = "referencesImportModal">
+        <div className="referencesImportModal">
           <p>{t('zotero_sync_description')}</p>
           <p>
             <OLButton

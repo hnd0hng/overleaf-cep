@@ -1,8 +1,8 @@
 export type Template = {
   id: string
-  version: number
+  version: string
   name: string
-  lastUpdated: Date
+  lastUpdated: string
   author: string
   authorMD: string
   description: string
@@ -12,5 +12,7 @@ export type Template = {
   compiler?: string
   language?: string
   owner: string
+  mainFile?: string
+  imageName?: string
+  brandVariationId?: string
 }
-

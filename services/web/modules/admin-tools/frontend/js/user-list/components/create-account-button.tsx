@@ -35,27 +35,24 @@ function CreateAccountButton({
       sendMB(trackingKey, segmentation)
     }
 
-    sendUserListMB('create-account-click')
+    sendUserListMB('create-account-click', undefined)
     setShowModal(true)
   }, [sendUserListMB, trackingKey])
 
   return (
     <div className="create-account-button-wrapper">
-        <OLButton
-          id={id}
-          className="create-account-button"
-          variant="primary"
-          onClick={handleButtonClick}
-        >
-          {buttonText || t('create_account')}
-        </OLButton>
+      <OLButton
+        id={id}
+        className="create-account-button"
+        variant="primary"
+        onClick={handleButtonClick}
+      >
+        {buttonText || t('create_account')}
+      </OLButton>
 
-      {showModal && (
-        <CreateAccountModal onHide={() => setShowModal(false)} />
-      )}
+      {showModal && <CreateAccountModal onHide={() => setShowModal(false)} />}
     </div>
   )
 }
 
 export default CreateAccountButton
-

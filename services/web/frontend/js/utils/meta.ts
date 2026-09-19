@@ -71,8 +71,11 @@ import { WritefullPublicEnv } from '@wf/domain/writefull-public-env'
 import { UserNotificationPreferences } from '../../../types/notifications'
 import { SharingPermissions } from '../../../modules/sharing-permissions/app/src/types'
 import { FullHistoryFailure } from '@ol-types/history/projectHistory'
+import type { Template as CEPTemplate } from '../../../modules/template-gallery/types/template'
+import type { GetUsersResponseBody as AdminGetUsersResponseBody } from '../../../modules/admin-tools/types/user/api'
 
 export interface Meta {
+  'og:title': string
   'ol-ExposedSettings': ExposedSettings
   'ol-adminCapabilities': AdminCapability[]
   'ol-adminSubscription': AdminSubscription
@@ -83,6 +86,7 @@ export interface Meta {
   'ol-allInReconfirmNotificationPeriods': UserEmailData[]
   'ol-allowedExperiments': string[]
   'ol-anonymous': boolean
+  'ol-availableAuthMethods': Array<'local' | 'ldap' | 'saml' | 'oidc'>
   'ol-baseAssetPath': string
   'ol-brandVariation': Record<string, any>
   'ol-canUseAddSeatsFeature': boolean
@@ -258,6 +262,7 @@ export interface Meta {
   'ol-postUrl': string
   'ol-prefetchedProjectsBlob': GetProjectsResponseBody | undefined
   'ol-prefetchedTemplatesBlob': GetTemplatesResponseBody | undefined
+  'ol-prefetchedUsersBlob': AdminGetUsersResponseBody | undefined
   'ol-preventCompileOnLoad'?: boolean
   'ol-primaryEmail': { email: string; confirmed: boolean }
   'ol-project': any // TODO
@@ -362,6 +367,8 @@ export interface Meta {
   'ol-symbolPaletteAvailable': boolean
   'ol-tags': Tag[]
   'ol-teamInvites': TeamInvite[]
+  'ol-template': CEPTemplate
+  'ol-templateCategory': string | undefined
   'ol-thirdPartyIds': ThirdPartyIds
   'ol-totalLicenses': number
   'ol-translationIoNotLoaded': string
@@ -376,6 +383,8 @@ export interface Meta {
   'ol-userCanExtendTrial': boolean
   'ol-userCanNotStartRequestedTrial': boolean
   'ol-userEmails': UserEmailData[]
+  'ol-userIsAdmin': boolean
+  'ol-userIsTemplatesManager': boolean
   'ol-userNotificationPreferences': UserNotificationPreferences
   'ol-userSettings': UserSettings
   'ol-user_id': string | undefined

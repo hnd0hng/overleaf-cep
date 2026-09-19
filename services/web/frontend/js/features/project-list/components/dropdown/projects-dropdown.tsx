@@ -32,7 +32,7 @@ export function Item({ filter, text, onClick }: ItemProps) {
   }
 
   return (
-    <ProjectsFilterMenu filter={filter}>
+    <ProjectsFilterMenu filter={filter} activePage="projects">
       {isActive => (
         <DropdownItem
           as="button"

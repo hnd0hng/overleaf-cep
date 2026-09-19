@@ -15,12 +15,10 @@ import OError from '@overleaf/o-error'
 const UserRegistrationHandler = {
   _registrationRequestIsValid(body) {
     const invalidEmail = AuthenticationManager.validateEmail(body.email || '')
-    if (invalidEmail) throw new OError('InvalidEmailError')
     const invalidPassword = AuthenticationManager.validatePassword(
       body.password || '',
       body.email
     )
-    if (invalidPassword) throw new OError('InvalidPasswordError')
     return !(invalidEmail || invalidPassword)
   },
 

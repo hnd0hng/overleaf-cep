@@ -5,7 +5,7 @@ import ProjectsList from './projects-list'
 import SelectOwnerForm from '../select-owner-form'
 import { useUserListContext } from '../../../user-list/context/user-list-context'
 import { useProjectListContext } from '../../context/project-list-context'
-import { User } from '../../../../../types/user/api'
+import { UserRef } from '../../../../../types/project/api'
 import OLRow from '@/shared/components/ol/ol-row'
 import OLCol from '@/shared/components/ol/ol-col'
 import OLForm from '@/shared/components/ol/ol-form'
@@ -33,7 +33,7 @@ function TransferProjectModal({
   const { projectsOwnerId } = useProjectListContext()
 
   const potentialOwners = useMemo(() => {
-    if (!loadedUsers) return null;
+    if (!loadedUsers) return null
     const result: UserRef[] = []
     for (const user of loadedUsers) {
       if (!user.deleted && user.id !== projectsOwnerId) {
@@ -41,7 +41,7 @@ function TransferProjectModal({
           id: user.id,
           firstName: user.firstName,
           lastName: user.lastName,
-          email: user.email
+          email: user.email,
         })
       }
     }
@@ -104,15 +104,15 @@ function TransferProjectModal({
           />
         </OLFormGroup>
 
-          <OLFormGroup controlId="send_notification_emails_checkbox">
-            <OLFormCheckbox
-              autoComplete="off"
-              onChange={handleCheckboxChange}
-              name="sendEmails"
-              label={t('send_notification_emails_to_users')}
-              checked={sendEmails}
-            />
-          </OLFormGroup>
+        <OLFormGroup controlId="send_notification_emails_checkbox">
+          <OLFormCheckbox
+            autoComplete="off"
+            onChange={handleCheckboxChange}
+            name="sendEmails"
+            label={t('send_notification_emails_to_users')}
+            checked={sendEmails}
+          />
+        </OLFormGroup>
       </OLForm>
     </ProjectsActionModal>
   )

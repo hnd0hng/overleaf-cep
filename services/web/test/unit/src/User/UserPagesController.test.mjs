@@ -603,10 +603,12 @@ describe('UserPagesController', function () {
     describe('when ldap.updateUserDetailsOnLogin is true', function () {
       beforeEach(function (ctx) {
         ctx.settings.ldap = { updateUserDetailsOnLogin: true }
+        ctx.req.user = { externalAuth: 'ldap' }
       })
 
       afterEach(function (ctx) {
         delete ctx.settings.ldap
+        delete ctx.req.user
       })
 
       it('should set "shouldAllowEditingDetails" to false', async function (ctx) {
@@ -629,10 +631,12 @@ describe('UserPagesController', function () {
     describe('when saml.updateUserDetailsOnLogin is true', function () {
       beforeEach(function (ctx) {
         ctx.settings.saml = { updateUserDetailsOnLogin: true }
+        ctx.req.user = { externalAuth: 'saml' }
       })
 
       afterEach(function (ctx) {
         delete ctx.settings.saml
+        delete ctx.req.user
       })
 
       it('should set "shouldAllowEditingDetails" to false', async function (ctx) {

@@ -35,11 +35,7 @@ export default function DeleteTokenModal({
   }
 
   const handleDelete = () => {
-    runAsync(
-      deleteJSON(`/git-bridge/personal-access-tokens/${tokenId}`, {
-        body: { _csrf: window.csrfToken },
-      })
-    )
+    runAsync(deleteJSON(`/git-bridge/personal-access-tokens/${tokenId}`))
       .then(() => {
         onDeleted(tokenId)
         handleClose()

@@ -802,19 +802,15 @@ describe('LaunchpadController', function () {
 
       it('should have updated the user to make them an admin', function (ctx) {
         ctx.User.updateOne.callCount.should.equal(1)
-        ctx.User.updateOne
-          .calledWith(
-            { _id: ctx.user._id },
-            {
-              $set: {
-                isAdmin: true,
-                emails: [
-                  { email: ctx.user.email, reversedHostname: 'moc.elpmaxe' },
-                ],
-              },
-            }
-          )
-          .should.equal(true)
+        const [conditions, update] = ctx.User.updateOne.firstCall.args
+        expect(conditions).to.deep.equal({ _id: ctx.user._id })
+        expect(update.$set.isAdmin).to.equal(true)
+        expect(update.$set.emails[0]).to.include({
+          email: ctx.user.email,
+          reversedHostname: 'moc.elpmaxe',
+        })
+        expect(update.$set.emails[0].confirmedAt).to.be.a('number')
+        expect(update.$unset).to.deep.equal({ hashedPassword: '' })
       })
 
       it('should have set a redirect in session', function (ctx) {

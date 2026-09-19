@@ -30,7 +30,6 @@ describe('ProjectOptionsHandler', function () {
           { name: 'English', code: 'en' },
           { name: 'French', code: 'fr' },
         ],
-        imageRoot: 'docker-repo/subdir',
         allowedImageNames: [
           { imageName: 'texlive-0000.0', imageDesc: 'test image 0' },
           { imageName: 'texlive-1234.5', imageDesc: 'test image 1' },
@@ -87,7 +86,7 @@ describe('ProjectOptionsHandler', function () {
       await ctx.handler.promises.setImageName(projectId, 'texlive-1234.5')
       const args = ctx.projectModel.updateOne.args[0]
       args[0]._id.should.equal(projectId)
-      args[1].imageName.should.equal('docker-repo/subdir/texlive-1234.5')
+      args[1].imageName.should.equal('texlive-1234.5')
     })
 
     it('should not perform and update on mongo if it is not a reconised image name', async function (ctx) {

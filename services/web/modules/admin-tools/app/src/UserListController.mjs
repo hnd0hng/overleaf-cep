@@ -9,6 +9,7 @@ import { User } from '../../../../app/src/models/User.mjs'
 import { DeletedUser } from '../../../../app/src/models/DeletedUser.mjs'
 import { DeletedProject } from '../../../../app/src/models/DeletedProject.mjs'
 import { expressify, promiseMapWithLimit } from '@overleaf/promise-utils'
+import AuthenticationManager from '../../../../app/src/Features/Authentication/AuthenticationManager.mjs'
 import SessionManager from '../../../../app/src/Features/Authentication/SessionManager.mjs'
 import UserRegistrationHandler from '../../../../app/src/Features/User/UserRegistrationHandler.mjs'
 import EmailHandler from '../../../../app/src/Features/Email/EmailHandler.mjs'
@@ -107,6 +108,9 @@ async function registerNewUser(req, res, next) {
   if (email == null || email === '') {
     return HttpErrorHandler.unprocessableEntity(req, res, 'Email address is empty')
   }
+  if (AuthenticationManager.validateEmail(email)) {
+    return HttpErrorHandler.unprocessableEntity(req, res, 'email_address_is_invalid')
+  }
   delete req.body.isExternal
   req.body.password = crypto.randomBytes(32).toString('hex')
   req.body.analyticsId = crypto.randomUUID()
@@ -123,6 +127,9 @@ async function registerNewUser(req, res, next) {
       return HttpErrorHandler.unprocessableEntity(req, res, 'email_address_is_invalid')
     }
     if (err.message === 'InvalidPasswordError') {
+      return HttpErrorHandler.unprocessableEntity(req, res, 'try_again')
+    }
+    if (err.message === 'request is not valid') {
       return HttpErrorHandler.unprocessableEntity(req, res, 'try_again')
     }
     OError.tag(err, 'error user registration', {

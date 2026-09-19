@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import useAsync from '@/shared/hooks/use-async'
 import { debugConsole } from '@/utils/debugging'
 import {
+  FetchError,
   getUserFacingMessage,
   postJSON,
 } from '@/infrastructure/fetch-json'
@@ -28,14 +29,16 @@ import { User } from '../../../../../types/user/api'
 
 type CreateUserResult = {
   user: User
+  emailIsNotSent: boolean
 }
 
 type Props = {
   handleCloseModal: () => void
 }
 
-const availableAuthMethods = getMeta("ol-availableAuthMethods")
-const onlyLocalAuthEnabled = (availableAuthMethods.length === 1 && availableAuthMethods[0] === 'local')
+const availableAuthMethods = getMeta('ol-availableAuthMethods')
+const onlyLocalAuthEnabled =
+  availableAuthMethods.length === 1 && availableAuthMethods[0] === 'local'
 
 function ModalContentNewUserForm({ handleCloseModal }: Props) {
   const { t } = useTranslation()
@@ -48,9 +51,12 @@ function ModalContentNewUserForm({ handleCloseModal }: Props) {
     isExternal: false,
   })
 
-  const { refreshUsers, addUserToView } = useUserListContext()
+  const { addUserToView } = useUserListContext()
   const [redirecting, setRedirecting] = useState(false)
-  const { data, isLoading, error, runAsync } = useAsync<CreateUserResult>()
+  const { data, isLoading, error, runAsync } = useAsync<
+    CreateUserResult,
+    FetchError
+  >()
 
   const createAccount = () => {
     runAsync(
@@ -61,7 +67,7 @@ function ModalContentNewUserForm({ handleCloseModal }: Props) {
           last_name: userData.lastName.trim(),
           isAdmin: userData.isAdmin,
           isExternal: userData.isExternal,
-        }
+        },
       })
     )
       .then(data => {
@@ -97,26 +103,25 @@ function ModalContentNewUserForm({ handleCloseModal }: Props) {
       <OLModalBody>
         {error && (
           <div className="notification-list">
-            <Notification
-              type="error"
-              content={t(getUserFacingMessage(error)) as string}
-            />
+            <Notification type="error" content={getUserFacingMessage(error)} />
           </div>
         )}
         {data?.emailIsNotSent && (
           <div className="notification-list">
             <Notification
               type="warning"
-              content={'The account has been created, but the notification email was not sent to the user. Please check your SMTP configuration.'}
+              content={
+                'The account has been created, but the notification email was not sent to the user. Please check your SMTP configuration.'
+              }
             />
           </div>
         )}
 
         <OLForm onSubmit={handleSubmit}>
-         <OLFormGroup controlId="email-address">
+          <OLFormGroup controlId="email-address">
             <OLFormLabel>{t('email_address')}</OLFormLabel>
             <OLFormControl
-              maxLength="128"
+              maxLength={128}
               autoComplete="off"
               type="text"
               name="email"
@@ -129,7 +134,7 @@ function ModalContentNewUserForm({ handleCloseModal }: Props) {
           <OLFormGroup controlId="first-name">
             <OLFormLabel>{t('first_name')}</OLFormLabel>
             <OLFormControl
-              maxLength="128"
+              maxLength={128}
               autoComplete="off"
               type="text"
               name="firstName"
@@ -141,7 +146,7 @@ function ModalContentNewUserForm({ handleCloseModal }: Props) {
           <OLFormGroup controlId="last-name">
             <OLFormLabel>{t('last_name')}</OLFormLabel>
             <OLFormControl
-              maxLength="128"
+              maxLength={128}
               autoComplete="off"
               type="text"
               name="lastName"
@@ -163,7 +168,7 @@ function ModalContentNewUserForm({ handleCloseModal }: Props) {
                 />
               </OLFormGroup>
             </OLCol>
-            {(!onlyLocalAuthEnabled &&
+            {!onlyLocalAuthEnabled && (
               <OLCol xs={6}>
                 <OLFormGroup controlId="is-external-checkbox">
                   <OLFormCheckbox
@@ -172,7 +177,7 @@ function ModalContentNewUserForm({ handleCloseModal }: Props) {
                     name="isExternal"
                     label="External authentication"
                     checked={userData.isExternal}
-                    aria-label={"External authentication"}
+                    aria-label={'External authentication'}
                   />
                 </OLFormGroup>
               </OLCol>
@@ -188,12 +193,15 @@ function ModalContentNewUserForm({ handleCloseModal }: Props) {
         <OLButton
           variant="primary"
           onClick={createAccount}
-          disabled={userData.email.trim() === '' ||
-                    userData.lastName.trim() === '' ||
-                    userData.firstName.trim() === '' ||
-                    isLoading || redirecting ||
-                    data?.emailIsNotSent ||
-                    (error && error.info?.statusCode !== 409)}
+          disabled={
+            userData.email.trim() === '' ||
+            userData.lastName.trim() === '' ||
+            userData.firstName.trim() === '' ||
+            isLoading ||
+            redirecting ||
+            Boolean(data?.emailIsNotSent) ||
+            Boolean(error && error.response?.status !== 409)
+          }
           isLoading={isLoading}
           loadingLabel={t('creating')}
         >

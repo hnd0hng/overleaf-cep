@@ -213,6 +213,16 @@ describe('SubscriptionUpdater', function () {
       ObjectId,
     }))
 
+    ctx.mongoose = {
+      startSession: sinon.stub().resolves({
+        withTransaction: async callback => await callback(),
+        endSession: sinon.stub().resolves(),
+      }),
+    }
+    vi.doMock('../../../../app/src/infrastructure/Mongoose', () => ({
+      default: ctx.mongoose,
+    }))
+
     vi.doMock(
       '../../../../app/src/Features/Subscription/FeaturesUpdater',
       () => ({

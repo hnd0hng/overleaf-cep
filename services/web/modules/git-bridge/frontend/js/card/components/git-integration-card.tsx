@@ -20,6 +20,7 @@ function GitSyncCard() {
         title={t('git')}
         description={t('git_clone_this_project')}
         icon={<GitLogoOrange size={32} />}
+        showPaywallBadge={false}
         onClick={() => setShow(true)}
       />
 

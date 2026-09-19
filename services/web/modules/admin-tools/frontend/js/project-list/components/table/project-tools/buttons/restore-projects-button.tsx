@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import getMeta from '@/utils/meta'
 import useIsMounted from '@/shared/hooks/use-is-mounted'
 import OLButton from '@/shared/components/ol/ol-button'
 import { useProjectListContext } from '../../../../context/project-list-context'
@@ -10,11 +9,8 @@ import { Project } from '../../../../../../../types/project/api'
 
 function RestoreProjectsButton() {
   const { t } = useTranslation()
-  const {
-    selectedProjects,
-    toggleSelectedProject,
-    updateProjectViewData,
-  } = useProjectListContext()
+  const { selectedProjects, toggleSelectedProject, updateProjectViewData } =
+    useProjectListContext()
   const [showModal, setShowModal] = useState(false)
   const isMounted = useIsMounted()
 
@@ -29,8 +25,6 @@ function RestoreProjectsButton() {
   }
 
   const handleRestoreProject = (project: Project) => {
-//    const ownerId = project.owner ?? getMeta('ol-user_id')
-    const ownerId = project.owner ?? getMeta('ol-user_id')
     return undeleteProject(project.id, project.owner).then(data => {
       toggleSelectedProject(project.id, false)
       updateProjectViewData({

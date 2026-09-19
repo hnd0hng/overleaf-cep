@@ -47,11 +47,7 @@ export default function TemplateGallery() {
       <OLRow className="gallery-container">
         {currentTemplates.length > 0 ? (
           currentTemplates.map(p => (
-            <TemplateGalleryEntry
-              className="gallery-thumbnail col-12 col-md-6 col-lg-4"
-              key={p.id}
-              template={p}
-            />
+            <TemplateGalleryEntry key={p.id} template={p} />
           ))
         ) : (
           <OLRow>

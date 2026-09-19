@@ -1,6 +1,4 @@
 import { ChangeEventHandler, useCallback, useRef, useEffect } from 'react'
-import OLFormGroup from '@/shared/components/ol/ol-form-group'
-import OLFormLabel from '@/shared/components/ol/ol-form-label'
 import OLFormSelect from '@/shared/components/ol/ol-form-select'
 
 type PossibleValue = string | number | boolean
@@ -29,15 +27,15 @@ type SettingsMenuSelectProps<T extends PossibleValue = string> = {
 export default function SettingsMenuSelect<T extends PossibleValue = string>(
   props: SettingsMenuSelectProps<T>
 ) {
-
- const { name, options, optgroup, onChange, value, disabled = false } = props
- const defaultApplied = useRef(false)
-
+  const { name, options, optgroup, onChange, value, disabled = false } = props
   useEffect(() => {
     if (value === undefined || value === null) {
-      onChange(options?.[0]?.value || optgroup?.options?.[0]?.value)
+      const defaultValue = options[0]?.value ?? optgroup?.options[0]?.value
+      if (defaultValue !== undefined) {
+        onChange(defaultValue)
+      }
     }
-  }, [value, options, onChange])
+  }, [value, options, optgroup, onChange])
 
   const handleChange: ChangeEventHandler<HTMLSelectElement> = useCallback(
     event => {
@@ -56,36 +54,35 @@ export default function SettingsMenuSelect<T extends PossibleValue = string>(
 
   return (
     <>
-
-        <OLFormSelect
-          onChange={handleChange}
-          value={value?.toString()}
-          disabled={disabled}
-          ref={selectRef}
-        >
-          {options.map(option => (
-            <option
-              key={`${name}-${option.value}`}
-              value={option.value.toString()}
-              aria-hidden={option.ariaHidden}
-              disabled={option.disabled}
-            >
-              {option.label}
-            </option>
-          ))}
-          {optgroup ? (
-            <optgroup label={optgroup.label}>
-              {optgroup.options.map(option => (
-                <option
-                  value={option.value.toString()}
-                  key={option.value.toString()}
-                >
-                  {option.label}
-                </option>
-              ))}
-            </optgroup>
-          ) : null}
-        </OLFormSelect>
+      <OLFormSelect
+        onChange={handleChange}
+        value={value?.toString()}
+        disabled={disabled}
+        ref={selectRef}
+      >
+        {options.map(option => (
+          <option
+            key={`${name}-${option.value}`}
+            value={option.value.toString()}
+            aria-hidden={option.ariaHidden}
+            disabled={option.disabled}
+          >
+            {option.label}
+          </option>
+        ))}
+        {optgroup ? (
+          <optgroup label={optgroup.label}>
+            {optgroup.options.map(option => (
+              <option
+                value={option.value.toString()}
+                key={option.value.toString()}
+              >
+                {option.label}
+              </option>
+            ))}
+          </optgroup>
+        ) : null}
+      </OLFormSelect>
     </>
   )
 }

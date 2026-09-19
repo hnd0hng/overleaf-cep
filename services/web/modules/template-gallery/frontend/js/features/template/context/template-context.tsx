@@ -1,6 +1,8 @@
 import {
   createContext,
   FC,
+  Dispatch,
+  SetStateAction,
   useCallback,
   useContext,
   useState,
@@ -12,18 +14,14 @@ import { Template } from '../../../../../types/template'
 
 type TemplateContextType = {
   template: Template
-  setTemplate: (template: Template) => void
+  setTemplate: Dispatch<SetStateAction<Template>>
 }
 
 export const TemplateContext = createContext<TemplateContextType | undefined>(
   undefined
 )
 
-type TemplateProviderProps = {
-  loadedTemplate: Template
-}
-
-export const TemplateProvider: FC<TemplateProviderProps> = ({ children }) => {
+export const TemplateProvider: FC<React.PropsWithChildren> = ({ children }) => {
   const loadedTemplate = useMemo(() => getMeta('ol-template'), [])
   const [template, setTemplate] = useState(loadedTemplate)
 
@@ -45,9 +43,7 @@ export const TemplateProvider: FC<TemplateProviderProps> = ({ children }) => {
 export const useTemplateContext = () => {
   const context = useContext(TemplateContext)
   if (!context) {
-    throw new Error(
-      `useTemplateContext must be used within a TemplateProvider`
-    )
+    throw new Error(`useTemplateContext must be used within a TemplateProvider`)
   }
   return context
 }
