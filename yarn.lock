@@ -6448,6 +6448,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@overleaf/linked-url-proxy@workspace:services/linked-url-proxy"
   dependencies:
+    "@overleaf/fetch-utils": "workspace:*"
     "@overleaf/logger": "workspace:*"
     "@overleaf/metrics": "workspace:*"
     "@overleaf/settings": "workspace:*"
