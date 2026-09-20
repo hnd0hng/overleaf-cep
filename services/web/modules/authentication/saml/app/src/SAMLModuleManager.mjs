@@ -20,12 +20,15 @@ const SAMLModuleManager = {
   }
 },
   passportSetup(passport, callback) {
+    const idpCert = process.env.OVERLEAF_SAML_IDP_CERT
+      ? readFilesContentFromEnv(process.env.OVERLEAF_SAML_IDP_CERT)
+      : process.env.OVERLEAF_SAML_CERT
     const samlOptions = {
       entryPoint: process.env.OVERLEAF_SAML_ENTRYPOINT,
       callbackUrl: `${Settings.siteUrl.replace(/\/+$/, '')}/saml/login/callback`,
       issuer: process.env.OVERLEAF_SAML_ISSUER,
       audience: process.env.OVERLEAF_SAML_AUDIENCE,
-      idpCert: readFilesContentFromEnv(process.env.OVERLEAF_SAML_IDP_CERT),
+      idpCert,
       privateKey:  readFilesContentFromEnv(process.env.OVERLEAF_SAML_PRIVATE_KEY),
       decryptionPvk:  readFilesContentFromEnv(process.env.OVERLEAF_SAML_DECRYPTION_PVK),
       signatureAlgorithm: process.env.OVERLEAF_SAML_SIGNATURE_ALGORITHM,
