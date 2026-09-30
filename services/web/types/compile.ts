@@ -80,6 +80,7 @@ export type CompileResponseData = {
 
 export type CompileOptions = {
   draft?: boolean
+  quick_preview?: boolean
   png2pdf?: boolean
   stopOnFirstError?: boolean
   isAutoCompileOnLoad?: boolean

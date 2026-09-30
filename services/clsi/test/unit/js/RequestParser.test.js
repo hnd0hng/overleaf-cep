@@ -178,6 +178,37 @@ describe('RequestParser', () => {
     })
   })
 
+  describe('with quick preview enabled', () => {
+    beforeEach(ctx => {
+      ctx.validRequest.compile.options.quick_preview = true
+      ctx.RequestParser.parse(ctx.validRequest, (error, data) => {
+        ctx.error = error
+        ctx.data = data
+      })
+    })
+
+    it('should enable quick preview and draft mode', ctx => {
+      expect(ctx.error).to.not.exist
+      expect(ctx.data.quick_preview).to.equal(true)
+      expect(ctx.data.draft).to.equal(true)
+    })
+  })
+
+  describe('with an invalid quick preview value', () => {
+    beforeEach(ctx => {
+      ctx.validRequest.compile.options.quick_preview = 'true'
+      ctx.RequestParser.parse(ctx.validRequest, error => {
+        ctx.error = error
+      })
+    })
+
+    it('should reject the value', ctx => {
+      expect(String(ctx.error)).to.include(
+        'quick_preview attribute should be a boolean'
+      )
+    })
+  })
+
   describe('with flags not specified', () => {
     beforeEach(async ctx => {
       await new Promise((resolve, reject) => {

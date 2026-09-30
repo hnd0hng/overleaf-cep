@@ -32,6 +32,7 @@ function runLatex(projectId, options, callback) {
     flags,
     compileGroup,
     stopOnFirstError,
+    quick_preview,
     stats,
     timings,
   } = options
@@ -48,6 +49,7 @@ function runLatex(projectId, options, callback) {
       flags,
       compileGroup,
       stopOnFirstError,
+      quick_preview,
     },
     'starting compile'
   )
@@ -57,6 +59,7 @@ function runLatex(projectId, options, callback) {
     command = _buildLatexCommand(mainFile, {
       compiler,
       stopOnFirstError,
+      quick_preview,
       flags,
     })
   } catch (err) {
@@ -195,6 +198,10 @@ function _buildLatexCommand(mainFile, opts = {}) {
   // Extra flags
   if (opts.flags) {
     command.push(...opts.flags)
+  }
+
+  if (opts.quick_preview) {
+    command.push('-e', '$max_repeat = 2;')
   }
 
   // TeX Engine selection

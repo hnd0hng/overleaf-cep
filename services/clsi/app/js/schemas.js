@@ -76,6 +76,7 @@ const compileOptionsSchema = z.strictObject({
   // schema itself.
   imageName: z.string().optional(),
   draft: z.boolean().optional(),
+  quick_preview: z.boolean().optional(),
   png2pdf: z.boolean().optional(),
   stopOnFirstError: z.boolean().optional(),
   check: z.string().optional(),

@@ -791,6 +791,7 @@ const makeDetachCompileProvider = (mockCompileOnLoad: boolean = false) => {
     const [error, setError] = useState<string | undefined>()
     const [autoCompile, setAutoCompile] = useState(true)
     const [draft, setDraft] = useState(false)
+    const [quickPreview, setQuickPreview] = useState(false)
     const [stopOnFirstError, setStopOnFirstError] = useState(false)
 
     const startCompile = useCallback(async () => {
@@ -838,6 +839,7 @@ const makeDetachCompileProvider = (mockCompileOnLoad: boolean = false) => {
       autoCompile,
       compiling,
       draft,
+      quickPreview,
       error,
       pdfDownloadUrl,
       pdfFile,
@@ -845,6 +847,7 @@ const makeDetachCompileProvider = (mockCompileOnLoad: boolean = false) => {
       setAutoCompile,
       setCompiling,
       setDraft,
+      setQuickPreview,
       setError,
       setStopOnFirstError,
       startCompile,

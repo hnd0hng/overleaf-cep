@@ -1121,6 +1121,34 @@ describe('ClsiManager', function () {
       })
     })
 
+    describe('with the quick preview option', function () {
+      beforeEach(async function (ctx) {
+        await ctx.ClsiManager.promises.sendRequest(
+          null,
+          ctx.project._id,
+          ctx.user_id,
+          {
+            timeout: 100,
+            draft: true,
+            quick_preview: true,
+          }
+        )
+      })
+
+      it('should add the option into the request', function (ctx) {
+        expect(ctx.FetchUtils.fetchStringWithResponse).to.have.been.calledWith(
+          sinon.match.any,
+          sinon.match({
+            json: {
+              compile: {
+                options: { draft: true, quick_preview: true },
+              },
+            },
+          })
+        )
+      })
+    })
+
     describe('with the checkpointing option', function () {
       it('should ask the clsi to enable checkpointing, leaving the image alone', async function (ctx) {
         await ctx.ClsiManager.promises.sendRequest(

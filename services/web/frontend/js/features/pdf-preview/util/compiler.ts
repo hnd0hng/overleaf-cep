@@ -87,6 +87,7 @@ export default class DocumentCompiler {
     this.timer = 0
     this.defaultOptions = {
       draft: false,
+      quick_preview: false,
       png2pdf: false,
       stopOnFirstError: false,
     }
@@ -140,6 +141,7 @@ export default class DocumentCompiler {
         rootDoc_id: rootDocId,
         rootResourcePath,
         draft: options.draft,
+        quick_preview: options.quick_preview,
         png2pdf: options.png2pdf,
         check: 'silent', // NOTE: 'error' and 'validate' are possible, but unused
         // use incremental compile for all users but revert to a full compile

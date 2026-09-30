@@ -54,6 +54,7 @@ describe('LatexRunner', () => {
     ctx.timeout = 42000
     ctx.flags = []
     ctx.stopOnFirstError = false
+    ctx.quick_preview = false
     ctx.stats = {}
     ctx.timings = {}
 
@@ -70,6 +71,7 @@ describe('LatexRunner', () => {
           compileGroup: this.compileGroup,
           flags: this.flags,
           stopOnFirstError: this.stopOnFirstError,
+          quick_preview: this.quick_preview,
           timings: this.timings,
           stats: this.stats,
         },
@@ -164,6 +166,31 @@ describe('LatexRunner', () => {
           '-lualatex',
           '$COMPILE_DIR/main-file.tex',
         ])
+      })
+    })
+
+    describe('with quick preview', () => {
+      it('should limit repeats for every supported PDF engine', async ctx => {
+        const compilerFlags = {
+          pdflatex: '-pdf',
+          xelatex: '-xelatex',
+          lualatex: '-lualatex',
+        }
+        ctx.quick_preview = true
+
+        for (const [compiler, compilerFlag] of Object.entries(compilerFlags)) {
+          ctx.compiler = compiler
+          await new Promise((resolve, reject) => {
+            ctx.call(err => {
+              if (err) reject(err)
+              resolve()
+            })
+          })
+          const command = ctx.CommandRunner.run.lastCall.args[1]
+          expect(command).to.include(compilerFlag)
+          expect(command).to.include('-e')
+          expect(command).to.include('$max_repeat = 2;')
+        }
       })
     })
 

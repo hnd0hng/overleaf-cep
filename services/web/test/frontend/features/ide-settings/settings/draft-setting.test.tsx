@@ -29,8 +29,24 @@ describe('<DraftSetting />', function () {
     const select = screen.getByLabelText('Compile mode')
 
     const options = [
-      { label: 'Normal', value: 'normal', draft: false },
-      { label: 'Fast [draft]', value: 'fast_draft', draft: true },
+      {
+        label: 'Normal',
+        value: 'normal',
+        draft: false,
+        quickPreview: false,
+      },
+      {
+        label: 'Fast [draft]',
+        value: 'fast_draft',
+        draft: true,
+        quickPreview: false,
+      },
+      {
+        label: 'Quick Preview',
+        value: 'quick_preview',
+        draft: true,
+        quickPreview: true,
+      },
     ]
     for (const option of options) {
       const optionElement = within(select).getByText(option.label)
@@ -39,6 +55,9 @@ describe('<DraftSetting />', function () {
       expect(!!localStorage.getItem(`draft:${projectDefaults._id}`)).to.equal(
         option.draft
       )
+      expect(
+        !!localStorage.getItem(`quick_preview:${projectDefaults._id}`)
+      ).to.equal(option.quickPreview)
     }
   })
 

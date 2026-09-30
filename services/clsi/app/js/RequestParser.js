@@ -89,6 +89,17 @@ function parse(body, callback) {
       default: false,
       type: 'boolean',
     })
+    response.quick_preview = _parseAttribute(
+      'quick_preview',
+      compile.options.quick_preview,
+      {
+        default: false,
+        type: 'boolean',
+      }
+    )
+    if (response.quick_preview) {
+      response.draft = true
+    }
     response.png2pdf = _parseAttribute('png2pdf', compile.options.png2pdf, {
       default: false,
       type: 'boolean',

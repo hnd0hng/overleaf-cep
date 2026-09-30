@@ -389,6 +389,21 @@ describe('CompileController', function () {
       })
     })
 
+    describe('with the quick preview attribute', function () {
+      beforeEach(async function (ctx) {
+        ctx.req.body = { quick_preview: true }
+        await ctx.CompileController.compile(ctx.req, ctx.res, ctx.next)
+      })
+
+      it('should enable quick preview and draft mode', function (ctx) {
+        ctx.CompileManager.promises.compile.should.have.been.calledWith(
+          ctx.projectId,
+          ctx.user_id,
+          sinon.match({ quick_preview: true, draft: true })
+        )
+      })
+    })
+
     describe('with an editor id', function () {
       beforeEach(async function (ctx) {
         ctx.req.body = { editorId: '550e8400-e29b-41d4-a716-446655440000' }

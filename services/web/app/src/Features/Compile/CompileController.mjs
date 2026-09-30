@@ -169,6 +169,7 @@ const compileSchema = z.object({
     rootDoc_id: zz.objectId().nullish(),
     compiler: z.string().optional(),
     draft: z.boolean().optional(),
+    quick_preview: z.boolean().optional(),
     png2pdf: z.boolean().optional(),
     // silently ignored (not rejected) when not one of these three, to
     // match the existing .includes() check below
@@ -437,6 +438,12 @@ const _CompileController = {
     }
     if (body.draft) {
       options.draft = body.draft
+    }
+    if (body.quick_preview !== undefined) {
+      options.quick_preview = body.quick_preview
+      if (body.quick_preview === true) {
+        options.draft = true
+      }
     }
     if (['validate', 'error', 'silent'].includes(body.check)) {
       options.check = body.check

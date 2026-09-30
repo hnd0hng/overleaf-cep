@@ -226,6 +226,7 @@ async function doCompile(request, stats, timings) {
       environment: env,
       compileGroup: request.compileGroup,
       stopOnFirstError: request.stopOnFirstError,
+      quick_preview: request.quick_preview,
       stats,
       timings,
     })

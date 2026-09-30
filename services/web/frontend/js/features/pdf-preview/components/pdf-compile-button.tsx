@@ -39,9 +39,11 @@ function PdfCompileButton() {
     autoCompile,
     compiling,
     draft,
+    quickPreview,
     hasChanges,
     setAutoCompile,
     setDraft,
+    setQuickPreview,
     setStopOnValidationError,
     stopOnFirstError,
     stopOnValidationError,
@@ -55,16 +57,17 @@ function PdfCompileButton() {
 
   const { t } = useTranslation()
 
-  // The two compile modes (Normal / Fast [draft]) are mutually exclusive.
+  // The compile modes are mutually exclusive.
   const setCompileMode = useCallback(
-    (mode: 'normal' | 'draft') => {
+    (mode: 'normal' | 'draft' | 'quick_preview') => {
       eventTracking.sendMB('recompile-setting-changed', {
         setting: 'compile-mode',
         settingVal: mode,
       })
-      setDraft(mode === 'draft')
+      setDraft(mode !== 'normal')
+      setQuickPreview(mode === 'quick_preview')
     },
-    [setDraft]
+    [setDraft, setQuickPreview]
   )
 
   const { detachRole } = useLayoutContext()
@@ -198,7 +201,7 @@ function PdfCompileButton() {
           <OLDropdownItem
             as="button"
             onClick={() => setCompileMode('normal')}
-            trailingIcon={!draft ? 'check' : null}
+            trailingIcon={!draft && !quickPreview ? 'check' : null}
           >
             {t('normal')}
           </OLDropdownItem>
@@ -207,9 +210,18 @@ function PdfCompileButton() {
           <OLDropdownItem
             as="button"
             onClick={() => setCompileMode('draft')}
-            trailingIcon={draft ? 'check' : null}
+            trailingIcon={draft && !quickPreview ? 'check' : null}
           >
             {t('fast')}&nbsp;<span className="subdued">[draft]</span>
+          </OLDropdownItem>
+        </li>
+        <li role="none">
+          <OLDropdownItem
+            as="button"
+            onClick={() => setCompileMode('quick_preview')}
+            trailingIcon={quickPreview ? 'check' : null}
+          >
+            {t('quick_preview')}
           </OLDropdownItem>
         </li>
         <OLDropdownDivider />

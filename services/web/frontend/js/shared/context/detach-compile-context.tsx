@@ -28,6 +28,7 @@ export const DetachCompileProvider: FC<React.PropsWithChildren> = ({
     compiling: _compiling,
     deliveryLatencies: _deliveryLatencies,
     draft: _draft,
+    quickPreview: _quickPreview,
     png2pdf: _png2pdf,
     editedSinceCompileStarted: _editedSinceCompileStarted,
     error: _error,
@@ -46,6 +47,7 @@ export const DetachCompileProvider: FC<React.PropsWithChildren> = ({
     setAnimateCompileDropdownArrow: _setAnimateCompileDropdownArrow,
     setAutoCompile: _setAutoCompile,
     setDraft: _setDraft,
+    setQuickPreview: _setQuickPreview,
     setError: _setError,
     setHasLintingError: _setHasLintingError,
     setHighlights: _setHighlights,
@@ -121,6 +123,12 @@ export const DetachCompileProvider: FC<React.PropsWithChildren> = ({
     'detached'
   )
   const [draft] = useDetachStateWatcher('draft', _draft, 'detacher', 'detached')
+  const [quickPreview] = useDetachStateWatcher(
+    'quickPreview',
+    _quickPreview,
+    'detacher',
+    'detached'
+  )
   const [png2pdf] = useDetachStateWatcher(
     'png2pdf',
     _png2pdf,
@@ -264,6 +272,12 @@ export const DetachCompileProvider: FC<React.PropsWithChildren> = ({
   const setDraft = useDetachAction(
     'setDraft',
     _setDraft,
+    'detached',
+    'detacher'
+  )
+  const setQuickPreview = useDetachAction(
+    'setQuickPreview',
+    _setQuickPreview,
     'detached',
     'detacher'
   )
@@ -425,6 +439,7 @@ export const DetachCompileProvider: FC<React.PropsWithChildren> = ({
       compiling,
       deliveryLatencies,
       draft,
+      quickPreview,
       png2pdf,
       editedSinceCompileStarted,
       error,
@@ -447,6 +462,7 @@ export const DetachCompileProvider: FC<React.PropsWithChildren> = ({
       setAutoCompile,
       setCompiling,
       setDraft,
+      setQuickPreview,
       setError,
       setHasLintingError,
       setHighlights,
@@ -485,6 +501,7 @@ export const DetachCompileProvider: FC<React.PropsWithChildren> = ({
       compiling,
       deliveryLatencies,
       draft,
+      quickPreview,
       png2pdf,
       editedSinceCompileStarted,
       error,
@@ -505,6 +522,7 @@ export const DetachCompileProvider: FC<React.PropsWithChildren> = ({
       setAutoCompile,
       setCompiling,
       setDraft,
+      setQuickPreview,
       setError,
       setHasLintingError,
       setHighlights,

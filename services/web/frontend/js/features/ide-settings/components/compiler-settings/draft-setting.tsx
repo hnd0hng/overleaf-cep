@@ -4,14 +4,16 @@ import { useCallback, useMemo } from 'react'
 import DropdownSetting from '../dropdown-setting'
 import { useEditorAnalytics } from '@/shared/hooks/use-editor-analytics'
 
-type CompileMode = 'normal' | 'fast_draft'
+type CompileMode = 'normal' | 'fast_draft' | 'quick_preview'
 
 export default function DraftSetting() {
-  const { draft, setDraft } = useCompileContext()
+  const { draft, quickPreview, setDraft, setQuickPreview } = useCompileContext()
   const { t } = useTranslation()
   const { sendEvent } = useEditorAnalytics()
 
-  const mode: CompileMode = draft ? 'fast_draft' : 'normal'
+  let mode: CompileMode = 'normal'
+  if (draft) mode = 'fast_draft'
+  if (quickPreview) mode = 'quick_preview'
 
   const changeMode = useCallback(
     (value: CompileMode) => {
@@ -19,15 +21,17 @@ export default function DraftSetting() {
         setting: 'compile-mode',
         settingVal: value,
       })
-      setDraft(value === 'fast_draft')
+      setDraft(value !== 'normal')
+      setQuickPreview(value === 'quick_preview')
     },
-    [sendEvent, setDraft]
+    [sendEvent, setDraft, setQuickPreview]
   )
 
   const options = useMemo(
     () => [
       { label: t('normal'), value: 'normal' as const },
       { label: t('fast_draft'), value: 'fast_draft' as const },
+      { label: t('quick_preview'), value: 'quick_preview' as const },
     ],
     [t]
   )

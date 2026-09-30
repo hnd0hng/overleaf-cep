@@ -2237,6 +2237,7 @@
   "purge": "Purge",
   "push_sharelatex_changes_to_github": "Push __appName__ changes to GitHub",
   "push_to_github_pull_to_overleaf": "Push to GitHub, pull to __appName__",
+  "quick_preview": "Quick Preview",
   "quoted_text": "Quoted text",
   "raw_logs": "Raw logs",
   "raw_logs_description": "Raw logs from the LaTeX compiler",

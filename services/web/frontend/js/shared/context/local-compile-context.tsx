@@ -72,6 +72,7 @@ export type CompileContext = {
   compiling: boolean
   deliveryLatencies: Record<string, any>
   draft: boolean
+  quickPreview: boolean
   png2pdf: boolean
   error?: string
   fileList?: PdfFileDataList
@@ -95,6 +96,7 @@ export type CompileContext = {
   rawLog?: string
   setAutoCompile: (value: boolean) => void
   setDraft: (value: any) => void
+  setQuickPreview: (value: boolean) => void
   setError: (value: any) => void
   setHasLintingError: (value: boolean) => void // only for storybook
   setHighlights: (value: any) => void
@@ -275,6 +277,12 @@ export const LocalCompileProvider: FC<React.PropsWithChildren> = ({
     listen: true,
   })
 
+  const [quickPreview, setQuickPreview] = usePersistedState(
+    `quick_preview:${projectId}`,
+    false,
+    { listen: true }
+  )
+
   // ol-canUsePng2Pdf is the single source of truth from the backend: it already
   // accounts for both the split-test rollout and the premium entitlement.
   const canUsePng2pdf = Boolean(getMeta('ol-canUsePng2Pdf'))
@@ -363,6 +371,10 @@ export const LocalCompileProvider: FC<React.PropsWithChildren> = ({
     compiler.setOption('draft', draft)
   }, [compiler, draft])
 
+  useEffect(() => {
+    compiler.setOption('quick_preview', quickPreview)
+  }, [compiler, quickPreview])
+
   // keep png2pdf (optimize images) setting in sync with the compiler
   useEffect(() => {
     compiler.setOption('png2pdf', png2pdf)
@@ -416,6 +428,7 @@ export const LocalCompileProvider: FC<React.PropsWithChildren> = ({
       settingsUpToDate =
         getRootDocInfo().rootDocId === dataFromCache.rootDocId &&
         dataFromCache.options.draft === draft &&
+        dataFromCache.options.quick_preview === quickPreview &&
         Boolean(dataFromCache.options.png2pdf) === png2pdf &&
         // Allow stopOnFirstError to be enabled in the compile from cache and disabled locally.
         // Compiles that passed with stopOnFirstError=true will also pass with stopOnFirstError=false. The inverse does not hold, and we need to recompile.
@@ -448,6 +461,7 @@ export const LocalCompileProvider: FC<React.PropsWithChildren> = ({
     imageName,
     stopOnFirstError,
     draft,
+    quickPreview,
     png2pdf,
   ])
 
@@ -777,6 +791,7 @@ export const LocalCompileProvider: FC<React.PropsWithChildren> = ({
       compiling,
       deliveryLatencies,
       draft,
+      quickPreview,
       png2pdf,
       editedSinceCompileStarted,
       error,
@@ -799,6 +814,7 @@ export const LocalCompileProvider: FC<React.PropsWithChildren> = ({
       setAutoCompile,
       setCompiling,
       setDraft,
+      setQuickPreview,
       setError,
       setHasLintingError, // only for stories
       setHighlights,
@@ -837,6 +853,7 @@ export const LocalCompileProvider: FC<React.PropsWithChildren> = ({
       compiling,
       deliveryLatencies,
       draft,
+      quickPreview,
       png2pdf,
       editedSinceCompileStarted,
       error,
@@ -856,6 +873,7 @@ export const LocalCompileProvider: FC<React.PropsWithChildren> = ({
       setAnimateCompileDropdownArrow,
       setAutoCompile,
       setDraft,
+      setQuickPreview,
       setError,
       setHasLintingError, // only for stories
       setHighlights,
