@@ -189,7 +189,7 @@ describe('LatexRunner', () => {
           const command = ctx.CommandRunner.run.lastCall.args[1]
           expect(command).to.include(compilerFlag)
           expect(command).to.include('-e')
-          expect(command).to.include('$max_repeat = 2;')
+          expect(command).to.include('$max_repeat = 1;')
         }
       })
     })

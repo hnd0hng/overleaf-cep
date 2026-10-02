@@ -1129,7 +1129,7 @@ describe('ClsiManager', function () {
           ctx.user_id,
           {
             timeout: 100,
-            draft: true,
+            draft: false,
             quick_preview: true,
           }
         )

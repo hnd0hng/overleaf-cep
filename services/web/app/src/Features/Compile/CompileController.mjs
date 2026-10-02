@@ -442,7 +442,7 @@ const _CompileController = {
     if (body.quick_preview !== undefined) {
       options.quick_preview = body.quick_preview
       if (body.quick_preview === true) {
-        options.draft = true
+        options.draft = false
       }
     }
     if (['validate', 'error', 'silent'].includes(body.check)) {

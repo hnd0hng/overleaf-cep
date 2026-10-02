@@ -44,7 +44,7 @@ describe('<DraftSetting />', function () {
       {
         label: 'Quick Preview',
         value: 'quick_preview',
-        draft: true,
+        draft: false,
         quickPreview: true,
       },
     ]

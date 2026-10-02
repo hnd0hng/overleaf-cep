@@ -201,7 +201,7 @@ function _buildLatexCommand(mainFile, opts = {}) {
   }
 
   if (opts.quick_preview) {
-    command.push('-e', '$max_repeat = 2;')
+    command.push('-e', '$max_repeat = 1;')
   }
 
   // TeX Engine selection

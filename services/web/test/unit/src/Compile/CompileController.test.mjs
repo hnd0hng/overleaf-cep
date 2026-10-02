@@ -391,15 +391,15 @@ describe('CompileController', function () {
 
     describe('with the quick preview attribute', function () {
       beforeEach(async function (ctx) {
-        ctx.req.body = { quick_preview: true }
+        ctx.req.body = { quick_preview: true, draft: true }
         await ctx.CompileController.compile(ctx.req, ctx.res, ctx.next)
       })
 
-      it('should enable quick preview and draft mode', function (ctx) {
+      it('should enable quick preview and disable draft mode', function (ctx) {
         ctx.CompileManager.promises.compile.should.have.been.calledWith(
           ctx.projectId,
           ctx.user_id,
-          sinon.match({ quick_preview: true, draft: true })
+          sinon.match({ quick_preview: true, draft: false })
         )
       })
     })

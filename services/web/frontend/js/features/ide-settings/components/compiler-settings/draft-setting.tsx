@@ -21,7 +21,7 @@ export default function DraftSetting() {
         setting: 'compile-mode',
         settingVal: value,
       })
-      setDraft(value !== 'normal')
+      setDraft(value === 'fast_draft')
       setQuickPreview(value === 'quick_preview')
     },
     [sendEvent, setDraft, setQuickPreview]

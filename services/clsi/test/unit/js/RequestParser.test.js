@@ -180,6 +180,7 @@ describe('RequestParser', () => {
 
   describe('with quick preview enabled', () => {
     beforeEach(ctx => {
+      ctx.validRequest.compile.options.draft = true
       ctx.validRequest.compile.options.quick_preview = true
       ctx.RequestParser.parse(ctx.validRequest, (error, data) => {
         ctx.error = error
@@ -187,10 +188,10 @@ describe('RequestParser', () => {
       })
     })
 
-    it('should enable quick preview and draft mode', ctx => {
+    it('should enable quick preview and disable draft mode', ctx => {
       expect(ctx.error).to.not.exist
       expect(ctx.data.quick_preview).to.equal(true)
-      expect(ctx.data.draft).to.equal(true)
+      expect(ctx.data.draft).to.equal(false)
     })
   })
 

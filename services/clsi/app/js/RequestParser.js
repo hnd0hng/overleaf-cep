@@ -98,7 +98,7 @@ function parse(body, callback) {
       }
     )
     if (response.quick_preview) {
-      response.draft = true
+      response.draft = false
     }
     response.png2pdf = _parseAttribute('png2pdf', compile.options.png2pdf, {
       default: false,

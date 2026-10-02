@@ -64,7 +64,7 @@ function PdfCompileButton() {
         setting: 'compile-mode',
         settingVal: mode,
       })
-      setDraft(mode !== 'normal')
+      setDraft(mode === 'draft')
       setQuickPreview(mode === 'quick_preview')
     },
     [setDraft, setQuickPreview]
