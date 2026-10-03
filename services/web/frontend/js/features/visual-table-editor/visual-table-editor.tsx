@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   OLModal,
   OLModalBody,
@@ -56,6 +57,9 @@ import { useProjectContext } from '@/shared/context/project-context'
 import { useEditorOpenDocContext } from '@/features/ide-react/context/editor-open-doc-context'
 import { useEditorManagerContext } from '@/features/ide-react/context/editor-manager-context'
 import { useFileTreePathContext } from '@/features/file-tree/contexts/file-tree-path'
+import VisualTableToolbarButton, {
+  VisualTableColorPicker,
+} from './components/visual-table-toolbar-button'
 import {
   CellPoint,
   CellSelection,
@@ -90,6 +94,7 @@ export default function VisualTableEditor({
   view,
   onClose,
 }: Props) {
+  const { t } = useTranslation()
   const { project, projectSnapshot } = useProjectContext()
   const { currentDocumentId } = useEditorOpenDocContext()
   const { openDocs } = useEditorManagerContext()
@@ -570,6 +575,9 @@ export default function VisualTableEditor({
     <OLModal
       show
       onHide={onClose}
+      backdrop="static"
+      keyboard={false}
+      clickOutsideDeactivates={false}
       size="lg"
       fullscreen="lg-down"
       className="visual-table-editor-modal"
@@ -583,502 +591,543 @@ export default function VisualTableEditor({
           role="toolbar"
           aria-label="Table operations"
         >
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() => setModel(history.current.undo())}
-          >
-            Undo
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() => setModel(history.current.redo())}
-          >
-            Redo
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() =>
-              apply(current => insertRow(current, selectedRange.minRow))
-            }
-          >
-            Row above
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() =>
-              apply(current => insertRow(current, selectedRange.maxRow + 1))
-            }
-          >
-            Row below
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() =>
-              apply(current =>
-                deleteRows(current, selectedRange.minRow, selectedRange.maxRow)
-              )
-            }
-          >
-            Delete row
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() =>
-              apply(current => insertColumn(current, selectedRange.minColumn))
-            }
-          >
-            Column before
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() =>
-              apply(current =>
-                insertColumn(current, selectedRange.maxColumn + 1)
-              )
-            }
-          >
-            Column after
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() =>
-              apply(current =>
-                deleteColumns(
-                  current,
-                  selectedRange.minColumn,
-                  selectedRange.maxColumn
-                )
-              )
-            }
-          >
-            Delete column
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() => apply(current => mergeSelection(current, selection))}
-          >
-            Merge
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() => apply(current => splitSelection(current, selection))}
-          >
-            Split
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() => apply(current => transpose(current))}
-          >
-            Transpose
-          </OLButton>
-          {(['left', 'center', 'right'] as HorizontalAlignment[]).map(
-            alignment => (
-              <OLButton
-                key={alignment}
-                size="sm"
-                variant="secondary"
-                onClick={() =>
-                  apply(current =>
-                    applyAlignment(current, selection, alignment)
+          <div className="vte-toolbar-group" role="group" aria-label="History">
+            <VisualTableToolbarButton
+              tooltipId="vte-undo"
+              icon="undo"
+              label="Undo"
+              onClick={() => setModel(history.current.undo())}
+            />
+            <VisualTableToolbarButton
+              tooltipId="vte-redo"
+              icon="redo"
+              label="Redo"
+              onClick={() => setModel(history.current.redo())}
+            />
+          </div>
+          <div className="vte-toolbar-group" role="group" aria-label="Rows">
+            <VisualTableToolbarButton
+              tooltipId="vte-row-above"
+              icon="vertical_align_top"
+              label="Insert row above"
+              onClick={() =>
+                apply(current => insertRow(current, selectedRange.minRow))
+              }
+            />
+            <VisualTableToolbarButton
+              tooltipId="vte-row-below"
+              icon="vertical_align_bottom"
+              label="Insert row below"
+              onClick={() =>
+                apply(current => insertRow(current, selectedRange.maxRow + 1))
+              }
+            />
+            <VisualTableToolbarButton
+              tooltipId="vte-delete-row"
+              icon="delete"
+              label="Delete row"
+              onClick={() =>
+                apply(current =>
+                  deleteRows(
+                    current,
+                    selectedRange.minRow,
+                    selectedRange.maxRow
                   )
-                }
-              >
-                {alignment}
-              </OLButton>
-            )
-          )}
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() =>
-              apply(current =>
-                applyTextStyle(current, selection, { bold: true })
-              )
-            }
-          >
-            Bold
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() =>
-              apply(current =>
-                applyTextStyle(current, selection, { italic: true })
-              )
-            }
-          >
-            Italic
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() =>
-              apply(current => clearFormatting(current, selection))
-            }
-          >
-            Clear format
-          </OLButton>
-          {(['top', 'middle', 'bottom'] as const).map(alignment => (
-            <OLButton
-              key={alignment}
-              size="sm"
-              variant="secondary"
-              onClick={() =>
-                apply(current =>
-                  applyAlignment(current, selection, undefined, alignment)
-                )
-              }
-            >
-              V-{alignment}
-            </OLButton>
-          ))}
-          {(
-            [
-              'all',
-              'outer',
-              'top',
-              'bottom',
-              'left',
-              'right',
-              'horizontal',
-              'vertical',
-              'none',
-            ] as const
-          ).map(border => (
-            <OLButton
-              key={border}
-              size="sm"
-              variant="secondary"
-              onClick={() =>
-                apply(current => applyBorders(current, selection, border))
-              }
-            >
-              Border {border}
-            </OLButton>
-          ))}
-          <label>
-            Text{' '}
-            <input
-              type="color"
-              onChange={event =>
-                apply(current =>
-                  applyTextStyle(current, selection, {
-                    color: event.target.value,
-                  })
                 )
               }
             />
-          </label>
-          <label>
-            Fill{' '}
-            <input
-              type="color"
-              onChange={event =>
+          </div>
+          <div className="vte-toolbar-group" role="group" aria-label="Columns">
+            <VisualTableToolbarButton
+              tooltipId="vte-column-before"
+              icon="format_indent_decrease"
+              label="Insert column before"
+              onClick={() =>
+                apply(current => insertColumn(current, selectedRange.minColumn))
+              }
+            />
+            <VisualTableToolbarButton
+              tooltipId="vte-column-after"
+              icon="format_indent_increase"
+              label="Insert column after"
+              onClick={() =>
+                apply(current =>
+                  insertColumn(current, selectedRange.maxColumn + 1)
+                )
+              }
+            />
+            <VisualTableToolbarButton
+              tooltipId="vte-delete-column"
+              icon="delete"
+              label="Delete column"
+              onClick={() =>
+                apply(current =>
+                  deleteColumns(
+                    current,
+                    selectedRange.minColumn,
+                    selectedRange.maxColumn
+                  )
+                )
+              }
+            />
+          </div>
+          <div className="vte-toolbar-group" role="group" aria-label="Cells">
+            <VisualTableToolbarButton
+              tooltipId="vte-merge-cells"
+              icon="cell_merge"
+              label="Merge cells"
+              onClick={() =>
+                apply(current => mergeSelection(current, selection))
+              }
+            />
+            <VisualTableToolbarButton
+              tooltipId="vte-split-cell"
+              icon="splitscreen_right"
+              label="Split cell"
+              onClick={() =>
+                apply(current => splitSelection(current, selection))
+              }
+            />
+            <VisualTableToolbarButton
+              tooltipId="vte-transpose"
+              icon="swap_horiz"
+              label="Transpose table"
+              onClick={() => apply(current => transpose(current))}
+            />
+          </div>
+          <div
+            className="vte-toolbar-group"
+            role="group"
+            aria-label="Horizontal alignment"
+          >
+            {(['left', 'center', 'right'] as HorizontalAlignment[]).map(
+              alignment => (
+                <VisualTableToolbarButton
+                  key={alignment}
+                  tooltipId={`vte-align-${alignment}`}
+                  icon={`format_align_${alignment}`}
+                  label={`Align ${alignment}`}
+                  onClick={() =>
+                    apply(current =>
+                      applyAlignment(current, selection, alignment)
+                    )
+                  }
+                />
+              )
+            )}
+          </div>
+          <div
+            className="vte-toolbar-group"
+            role="group"
+            aria-label="Text style"
+          >
+            <VisualTableToolbarButton
+              tooltipId="vte-bold"
+              icon="format_bold"
+              label="Bold"
+              onClick={() =>
+                apply(current =>
+                  applyTextStyle(current, selection, { bold: true })
+                )
+              }
+            />
+            <VisualTableToolbarButton
+              tooltipId="vte-italic"
+              icon="format_italic"
+              label="Italic"
+              onClick={() =>
+                apply(current =>
+                  applyTextStyle(current, selection, { italic: true })
+                )
+              }
+            />
+            <VisualTableToolbarButton
+              tooltipId="vte-clear-format"
+              icon="format_clear"
+              label="Clear formatting"
+              onClick={() =>
+                apply(current => clearFormatting(current, selection))
+              }
+            />
+          </div>
+          <div
+            className="vte-toolbar-group"
+            role="group"
+            aria-label="Vertical alignment"
+          >
+            {(['top', 'middle', 'bottom'] as const).map(alignment => (
+              <VisualTableToolbarButton
+                key={alignment}
+                tooltipId={`vte-vertical-align-${alignment}`}
+                icon={
+                  alignment === 'middle'
+                    ? 'vertical_align_center'
+                    : `vertical_align_${alignment}`
+                }
+                label={`Align ${alignment}`}
+                onClick={() =>
+                  apply(current =>
+                    applyAlignment(current, selection, undefined, alignment)
+                  )
+                }
+              />
+            ))}
+          </div>
+          <div className="vte-toolbar-group" role="group" aria-label="Borders">
+            {(
+              [
+                'all',
+                'outer',
+                'top',
+                'bottom',
+                'left',
+                'right',
+                'horizontal',
+                'vertical',
+                'none',
+              ] as const
+            ).map(border => (
+              <VisualTableToolbarButton
+                key={border}
+                tooltipId={`vte-border-${border}`}
+                icon={border === 'none' ? 'border_clear' : `border_${border}`}
+                label={`Border ${border}`}
+                onClick={() =>
+                  apply(current => applyBorders(current, selection, border))
+                }
+              />
+            ))}
+          </div>
+          <div className="vte-toolbar-group" role="group" aria-label="Colors">
+            <VisualTableColorPicker
+              tooltipId="vte-text-color"
+              icon="format_color_text"
+              label="Text color"
+              onChange={color =>
+                apply(current => applyTextStyle(current, selection, { color }))
+              }
+            />
+            <VisualTableColorPicker
+              tooltipId="vte-fill-color"
+              icon="format_color_fill"
+              label="Fill color"
+              onChange={color =>
                 apply(current => {
                   const next = structuredClone(current)
                   for (const cell of selectedCells(next, selection))
-                    cell.backgroundColor = event.target.value
+                    cell.backgroundColor = color
                   return next
                 })
               }
             />
-          </label>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() =>
-              apply(current =>
-                applyTextStyle(current, selection, { color: undefined })
-              )
-            }
-          >
-            Remove text color
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() =>
-              apply(current => {
-                const next = structuredClone(current)
-                for (const cell of selectedCells(next, selection))
-                  cell.backgroundColor = undefined
-                return next
-              })
-            }
-          >
-            Remove fill
-          </OLButton>
+            <VisualTableToolbarButton
+              tooltipId="vte-remove-text-color"
+              icon="format_color_reset"
+              label="Remove text color"
+              onClick={() =>
+                apply(current =>
+                  applyTextStyle(current, selection, { color: undefined })
+                )
+              }
+            />
+            <VisualTableToolbarButton
+              tooltipId="vte-remove-fill"
+              icon="invert_colors_off"
+              label="Remove fill color"
+              onClick={() =>
+                apply(current => {
+                  const next = structuredClone(current)
+                  for (const cell of selectedCells(next, selection))
+                    cell.backgroundColor = undefined
+                  return next
+                })
+              }
+            />
+          </div>
         </div>
 
         <div className="vte-options">
-          <label>
-            Environment{' '}
-            <select
-              value={model.options.environment}
-              onChange={event =>
-                setOption(
-                  'environment',
-                  event.target.value as TableModel['options']['environment']
+          <div
+            className="vte-options-group"
+            role="group"
+            aria-label="Table settings"
+          >
+            <label>
+              Environment{' '}
+              <select
+                value={model.options.environment}
+                onChange={event =>
+                  setOption(
+                    'environment',
+                    event.target.value as TableModel['options']['environment']
+                  )
+                }
+              >
+                <option value="tabular">tabular</option>
+                <option value="tabularx">tabularx</option>
+                <option value="longtable">longtable</option>
+              </select>
+            </label>
+            <label>
+              Style{' '}
+              <select
+                value={model.options.style}
+                onChange={event =>
+                  apply(current => {
+                    const style = event.target.value as 'default' | 'booktabs'
+                    const wholeTable = {
+                      from: { row: 0, column: 0 },
+                      to: {
+                        row: current.rows.length - 1,
+                        column: current.columns.length - 1,
+                      },
+                    }
+                    const next = applyBorders(
+                      current,
+                      wholeTable,
+                      style === 'default' ? 'all' : 'none'
+                    )
+                    next.options.style = style
+                    return next
+                  })
+                }
+              >
+                <option value="default">Default</option>
+                <option value="booktabs">Booktabs</option>
+              </select>
+            </label>
+            <label>
+              Scale{' '}
+              <select
+                value={model.options.scale}
+                onChange={event =>
+                  setOption(
+                    'scale',
+                    event.target.value as TableModel['options']['scale']
+                  )
+                }
+              >
+                <option value="none">None</option>
+                <option value="textwidth">Text width</option>
+                <option value="columnwidth">Column width</option>
+              </select>
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={model.options.centered}
+                onChange={event => setOption('centered', event.target.checked)}
+              />{' '}
+              Center table
+            </label>
+            <label>
+              Caption{' '}
+              <input
+                value={model.options.caption}
+                onChange={event => setOption('caption', event.target.value)}
+              />
+            </label>
+            <label>
+              Label{' '}
+              <input
+                value={model.options.label}
+                onChange={event => setOption('label', event.target.value)}
+              />
+            </label>
+          </div>
+          <div
+            className="vte-options-group"
+            role="group"
+            aria-label="Find and replace"
+          >
+            <label>
+              Find{' '}
+              <input
+                value={find}
+                onChange={event => setFind(event.target.value)}
+              />
+            </label>
+            <label>
+              Replace{' '}
+              <input
+                value={replace}
+                onChange={event => setReplace(event.target.value)}
+              />
+            </label>
+            <VisualTableToolbarButton
+              tooltipId="vte-previous-match"
+              icon="keyboard_arrow_up"
+              label="Previous match"
+              disabled={!matches.length}
+              onClick={() => navigateMatch(-1)}
+            />
+            <VisualTableToolbarButton
+              tooltipId="vte-next-match"
+              icon="keyboard_arrow_down"
+              label="Next match"
+              disabled={!matches.length}
+              onClick={() => navigateMatch(1)}
+            />
+            <VisualTableToolbarButton
+              tooltipId="vte-replace-current"
+              icon="find_replace"
+              label="Replace current match"
+              disabled={!matches.length || matchIndex < 0}
+              onClick={() => {
+                const match = matches[matchIndex]
+                if (!match) return
+                const target = {
+                  from: { row: match.row, column: match.column },
+                  to: { row: match.row, column: match.column },
+                }
+                apply(current =>
+                  replaceText(current, find, replace, target, false)
+                )
+              }}
+            />
+            <VisualTableToolbarButton
+              tooltipId="vte-replace-selected"
+              icon="select_all"
+              label="Replace in selected cells"
+              onClick={() =>
+                find &&
+                apply(current =>
+                  replaceText(current, find, replace, selection, true)
                 )
               }
-            >
-              <option value="tabular">tabular</option>
-              <option value="tabularx">tabularx</option>
-              <option value="longtable">longtable</option>
-            </select>
-          </label>
-          <label>
-            Style{' '}
-            <select
-              value={model.options.style}
-              onChange={event =>
-                apply(current => {
-                  const style = event.target.value as 'default' | 'booktabs'
-                  const wholeTable = {
-                    from: { row: 0, column: 0 },
-                    to: {
-                      row: current.rows.length - 1,
-                      column: current.columns.length - 1,
-                    },
-                  }
-                  const next = applyBorders(
+            />
+            <VisualTableToolbarButton
+              tooltipId="vte-replace-all"
+              icon="published_with_changes"
+              label="Replace all"
+              onClick={() =>
+                find &&
+                apply(current =>
+                  replaceText(current, find, replace, undefined, true)
+                )
+              }
+            />
+          </div>
+          <div
+            className="vte-options-group"
+            role="group"
+            aria-label="Number formatting"
+          >
+            <label>
+              Decimals{' '}
+              <input
+                type="number"
+                min="0"
+                max="12"
+                value={numberPrecision}
+                onChange={event =>
+                  setNumberPrecision(Number(event.target.value))
+                }
+              />
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={numberGrouping}
+                onChange={event => setNumberGrouping(event.target.checked)}
+              />{' '}
+              Thousands separator
+            </label>
+            <label>
+              Decimal{' '}
+              <select
+                value={decimalSeparator}
+                onChange={event =>
+                  setDecimalSeparator(event.target.value as '.' | ',')
+                }
+              >
+                <option value=".">.</option>
+                <option value=",">,</option>
+              </select>
+            </label>
+            <VisualTableToolbarButton
+              tooltipId="vte-format-numbers"
+              icon="number"
+              label="Format numbers"
+              onClick={() =>
+                apply(current =>
+                  formatNumbers(
                     current,
-                    wholeTable,
-                    style === 'default' ? 'all' : 'none'
+                    selection,
+                    numberPrecision,
+                    numberGrouping,
+                    decimalSeparator
                   )
-                  next.options.style = style
+                )
+              }
+            />
+          </div>
+          <div
+            className="vte-options-group"
+            role="group"
+            aria-label="Data operations"
+          >
+            <VisualTableToolbarButton
+              tooltipId="vte-repeating-header"
+              icon="repeat"
+              label="Toggle repeating header"
+              onClick={() =>
+                apply(current => {
+                  const next = structuredClone(current)
+                  for (
+                    let row = selectedRange.minRow;
+                    row <= selectedRange.maxRow;
+                    row++
+                  ) {
+                    next.rows[row].repeatOnNewPage =
+                      !next.rows[row].repeatOnNewPage
+                  }
                   return next
                 })
               }
-            >
-              <option value="default">Default</option>
-              <option value="booktabs">Booktabs</option>
-            </select>
-          </label>
-          <label>
-            Scale{' '}
-            <select
-              value={model.options.scale}
-              onChange={event =>
-                setOption(
-                  'scale',
-                  event.target.value as TableModel['options']['scale']
-                )
-              }
-            >
-              <option value="none">None</option>
-              <option value="textwidth">Text width</option>
-              <option value="columnwidth">Column width</option>
-            </select>
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={model.options.centered}
-              onChange={event => setOption('centered', event.target.checked)}
-            />{' '}
-            Center table
-          </label>
-          <label>
-            Caption{' '}
-            <input
-              value={model.options.caption}
-              onChange={event => setOption('caption', event.target.value)}
             />
-          </label>
-          <label>
-            Label{' '}
-            <input
-              value={model.options.label}
-              onChange={event => setOption('label', event.target.value)}
-            />
-          </label>
-          <label>
-            Find{' '}
-            <input
-              value={find}
-              onChange={event => setFind(event.target.value)}
-            />
-          </label>
-          <label>
-            Replace{' '}
-            <input
-              value={replace}
-              onChange={event => setReplace(event.target.value)}
-            />
-          </label>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            disabled={!matches.length}
-            onClick={() => navigateMatch(-1)}
-          >
-            Previous match
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            disabled={!matches.length}
-            onClick={() => navigateMatch(1)}
-          >
-            Next match
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            disabled={!matches.length || matchIndex < 0}
-            onClick={() => {
-              const match = matches[matchIndex]
-              if (!match) return
-              const target = {
-                from: { row: match.row, column: match.column },
-                to: { row: match.row, column: match.column },
-              }
-              apply(current =>
-                replaceText(current, find, replace, target, false)
-              )
-            }}
-          >
-            Replace current
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() =>
-              find &&
-              apply(current =>
-                replaceText(current, find, replace, selection, true)
-              )
-            }
-          >
-            Replace selected
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() =>
-              find &&
-              apply(current =>
-                replaceText(current, find, replace, undefined, true)
-              )
-            }
-          >
-            Replace all
-          </OLButton>
-          <label>
-            Decimals{' '}
-            <input
-              type="number"
-              min="0"
-              max="12"
-              value={numberPrecision}
-              onChange={event => setNumberPrecision(Number(event.target.value))}
-            />
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={numberGrouping}
-              onChange={event => setNumberGrouping(event.target.checked)}
-            />{' '}
-            Thousands separator
-          </label>
-          <label>
-            Decimal{' '}
-            <select
-              value={decimalSeparator}
-              onChange={event =>
-                setDecimalSeparator(event.target.value as '.' | ',')
-              }
-            >
-              <option value=".">.</option>
-              <option value=",">,</option>
-            </select>
-          </label>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() =>
-              apply(current =>
-                formatNumbers(
-                  current,
-                  selection,
-                  numberPrecision,
-                  numberGrouping,
-                  decimalSeparator
-                )
-              )
-            }
-          >
-            Format numbers
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() =>
-              apply(current => {
-                const next = structuredClone(current)
-                for (
-                  let row = selectedRange.minRow;
-                  row <= selectedRange.maxRow;
-                  row++
-                ) {
-                  next.rows[row].repeatOnNewPage =
-                    !next.rows[row].repeatOnNewPage
+            <label>
+              <input
+                type="checkbox"
+                checked={preservePasteFormatting}
+                onChange={event =>
+                  setPreservePasteFormatting(event.target.checked)
                 }
-                return next
-              })
-            }
-          >
-            Toggle repeating header
-          </OLButton>
-          <label>
-            <input
-              type="checkbox"
-              checked={preservePasteFormatting}
-              onChange={event =>
-                setPreservePasteFormatting(event.target.checked)
+              />{' '}
+              Preserve paste formatting
+            </label>
+            <VisualTableToolbarButton
+              tooltipId="vte-paste-special"
+              icon="content_paste"
+              label="Paste special"
+              onClick={pasteSpecial}
+            />
+            <VisualTableToolbarButton
+              tooltipId="vte-import-csv"
+              icon="upload"
+              label="Import CSV"
+              onClick={() => csvInputRef.current?.click()}
+            />
+            <VisualTableToolbarButton
+              tooltipId="vte-export-csv"
+              icon="download"
+              label="Export CSV"
+              onClick={() =>
+                download(
+                  'table.csv',
+                  exportCsv(model),
+                  'text/csv;charset=utf-8'
+                )
               }
-            />{' '}
-            Preserve paste formatting
-          </label>
-          <OLButton size="sm" variant="secondary" onClick={pasteSpecial}>
-            Paste special
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() => csvInputRef.current?.click()}
-          >
-            Import CSV
-          </OLButton>
-          <OLButton
-            size="sm"
-            variant="secondary"
-            onClick={() =>
-              download('table.csv', exportCsv(model), 'text/csv;charset=utf-8')
-            }
-          >
-            Export CSV
-          </OLButton>
-          <input
-            ref={csvInputRef}
-            hidden
-            type="file"
-            accept=".csv,text/csv"
-            onChange={importCsv}
-          />
+            />
+            <input
+              ref={csvInputRef}
+              hidden
+              type="file"
+              accept=".csv,text/csv"
+              onChange={importCsv}
+            />
+          </div>
         </div>
 
         {error && (
@@ -1117,26 +1166,24 @@ export default function VisualTableEditor({
                   }
                 >
                   {index + 1}
-                  <button
-                    type="button"
-                    aria-label={`Move column ${index + 1} left`}
+                  <VisualTableToolbarButton
+                    tooltipId={`vte-move-column-${index}-left`}
+                    icon="arrow_left_alt"
+                    label={`Move column ${index + 1} left`}
                     disabled={index === 0}
                     onClick={() =>
                       apply(current => moveColumn(current, index, index - 1))
                     }
-                  >
-                    ‹
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Move column ${index + 1} right`}
+                  />
+                  <VisualTableToolbarButton
+                    tooltipId={`vte-move-column-${index}-right`}
+                    icon="arrow_right_alt"
+                    label={`Move column ${index + 1} right`}
                     disabled={index === model.columns.length - 1}
                     onClick={() =>
                       apply(current => moveColumn(current, index, index + 1))
                     }
-                  >
-                    ›
-                  </button>
+                  />
                   <select
                     aria-label={`Width for column ${index + 1}`}
                     value={column.width.mode}
@@ -1217,8 +1264,10 @@ export default function VisualTableEditor({
                     }
                   >
                     {virtualRow.index + 1}
-                    <button
-                      type="button"
+                    <VisualTableToolbarButton
+                      tooltipId={`vte-move-row-${virtualRow.index}-up`}
+                      icon="arrow_upward"
+                      label={`Move row ${virtualRow.index + 1} up`}
                       disabled={virtualRow.index === 0}
                       onClick={() =>
                         apply(current =>
@@ -1229,11 +1278,11 @@ export default function VisualTableEditor({
                           )
                         )
                       }
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
+                    />
+                    <VisualTableToolbarButton
+                      tooltipId={`vte-move-row-${virtualRow.index}-down`}
+                      icon="arrow_downward"
+                      label={`Move row ${virtualRow.index + 1} down`}
                       disabled={virtualRow.index === model.rows.length - 1}
                       onClick={() =>
                         apply(current =>
@@ -1244,9 +1293,7 @@ export default function VisualTableEditor({
                           )
                         )
                       }
-                    >
-                      ↓
-                    </button>
+                    />
                   </div>
                   {model.columns.map((_, column) => {
                     const cell = cellAt(model, virtualRow.index, column)!
@@ -1332,12 +1379,12 @@ export default function VisualTableEditor({
             <div className="vte-source-preview">
               <div className="vte-source-heading">
                 LaTeX preview{' '}
-                <button
-                  type="button"
+                <VisualTableToolbarButton
+                  tooltipId="vte-copy-latex"
+                  icon="content_copy"
+                  label="Copy LaTeX"
                   onClick={() => navigator.clipboard.writeText(generated.latex)}
-                >
-                  Copy
-                </button>
+                />
               </div>
               <pre>{generated.latex}</pre>
               {generated.packages.length > 0 && (
@@ -1348,13 +1395,14 @@ export default function VisualTableEditor({
             </div>
           )}
         </div>
-        <button
-          type="button"
-          className="btn btn-link"
+        <VisualTableToolbarButton
+          tooltipId="vte-toggle-latex-preview"
+          icon={sourceVisible ? 'visibility_off' : 'visibility'}
+          label={`${sourceVisible ? 'Hide' : 'Show'} LaTeX preview`}
+          active={sourceVisible}
+          className="vte-preview-toggle"
           onClick={() => setSourceVisible(value => !value)}
-        >
-          {sourceVisible ? 'Hide' : 'Show'} LaTeX preview
-        </button>
+        />
         {unsafeReview && (
           <div className="vte-unsafe-review">
             <h3>Mandatory unsafe-import diff review</h3>
@@ -1373,7 +1421,7 @@ export default function VisualTableEditor({
       </OLModalBody>
       <OLModalFooter>
         <OLButton variant="secondary" onClick={onClose}>
-          Cancel
+          {t('close')}
         </OLButton>
         <OLButton variant="primary" onClick={commit}>
           {model.unsafeImport && !unsafeReview
