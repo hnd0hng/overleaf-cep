@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next'
 import { usePermissionsContext } from '@/features/ide-react/context/permissions-context'
 import { language } from '@codemirror/language'
 import { isCursorOnEmptyLine } from '@/features/source-editor/utils/is-cursor-on-empty-line'
+import { openVisualTableEditor } from '@/features/visual-table-editor/controller'
 
 export const useToolbarMenuBarEditorCommands = () => {
   const view = useCodeMirrorViewContext()
@@ -207,9 +208,17 @@ export const useToolbarMenuBarEditorCommands = () => {
       {
         id: 'insert-table',
         label: t('table'),
+        menuLabel: 'New Table',
         handler: () => {
           commands.insertTable(view, 3, 3)
           view.focus()
+        },
+      },
+      {
+        id: 'open-visual-table-editor',
+        label: 'Open Visual Table Editor',
+        handler: () => {
+          openVisualTableEditor({ mode: 'new' })
         },
       },
       {

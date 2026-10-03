@@ -37,6 +37,9 @@ import {
 import { isCursorOnEmptyLine } from '../utils/is-cursor-on-empty-line'
 import { selectAll } from '@codemirror/commands'
 import { useTrackedChangesActions } from '@/features/review-panel/hooks/use-tracked-changes-actions'
+import { syntaxTree } from '@codemirror/language'
+import { openVisualTableEditor } from '@/features/visual-table-editor/controller'
+import { SyntaxNode } from '@lezer/common'
 
 export const useContextMenuItems = () => {
   const view = useCodeMirrorViewContext()
@@ -131,6 +134,17 @@ export const useContextMenuItems = () => {
   )
 
   const inVisualMode = isVisual(view)
+  let tableNode: SyntaxNode | null = syntaxTree(state).resolveInner(
+    state.selection.main.head,
+    -1
+  )
+  while (
+    tableNode &&
+    !tableNode.type.is('TableEnvironment') &&
+    !tableNode.type.is('TabularEnvironment')
+  ) {
+    tableNode = tableNode.parent
+  }
 
   const handleCut = wrapForContextMenu('cut', () => cutSelection(view))
   const handleCopy = wrapForContextMenu('copy', () => copySelection(view))
@@ -160,6 +174,13 @@ export const useContextMenuItems = () => {
   )
   const handleDelete = wrapForContextMenu('delete', () =>
     commands.deleteSelection(view)
+  )
+  const handleEditTable = wrapForContextMenu(
+    'edit-table' as ContextMenuItemSegmentation,
+    () => {
+      openVisualTableEditor({ mode: 'edit' })
+      return true
+    }
   )
 
   const handleToggleTrackChanges = wrapForContextMenu(
@@ -277,6 +298,14 @@ export const useContextMenuItems = () => {
         handler: handleDelete,
         disabled: !hasSelection,
         show: canEdit,
+        shortcut: undefined,
+      },
+      {
+        label: 'Edit table',
+        handler: handleEditTable,
+        disabled: false,
+        separatorAbove: true,
+        show: canEdit && Boolean(tableNode),
         shortcut: undefined,
       },
       {

@@ -162,7 +162,11 @@ export const ToolbarMenuBar = () => {
               'insert-figure-from-url',
             ],
           },
-          'insert-table',
+          {
+            id: 'insert-table-group',
+            title: t('table'),
+            children: ['insert-table', 'open-visual-table-editor'],
+          },
           'insert-citation',
           'insert-link',
           'insert-cross-reference',
