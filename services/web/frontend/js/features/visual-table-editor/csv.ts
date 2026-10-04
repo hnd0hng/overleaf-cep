@@ -1,7 +1,4 @@
 import { parse } from 'csv-parse/browser/esm/sync'
-import { stringify } from 'csv-stringify/browser/esm/sync'
-import { cellAt } from './model'
-import { TableModel } from './types'
 
 export const parseDelimited = (
   value: string,
@@ -21,7 +18,7 @@ export const parseDelimited = (
 
 export const detectDelimiter = (value: string) => {
   const firstLine = value.split(/\r?\n/, 1)[0]
-  const candidates = ['\t', ',', ';']
+  const candidates = [',', ';', '\t']
   return candidates.sort(
     (a, b) => firstLine.split(b).length - firstLine.split(a).length
   )[0]
@@ -29,23 +26,6 @@ export const detectDelimiter = (value: string) => {
 
 export const parseSpreadsheetClipboard = (value: string) =>
   parseDelimited(value, detectDelimiter(value))
-
-export const exportCsv = (model: TableModel, delimiter = ',') => {
-  const data: string[][] = []
-  for (let row = 0; row < model.rows.length; row++) {
-    const values: string[] = []
-    for (let column = 0; column < model.columns.length; column++) {
-      const cell = cellAt(model, row, column)!
-      values.push(
-        cell.row === row && cell.column === column
-          ? cell.content.text || cell.content.rawLatex || ''
-          : ''
-      )
-    }
-    data.push(values)
-  }
-  return stringify(data, { delimiter })
-}
 
 export const parseHtmlTable = (html: string) => {
   const document = new DOMParser().parseFromString(html, 'text/html')

@@ -428,17 +428,70 @@ export type ParseResult = {
   unsafe: boolean
 }
 
+export type TableEnvironmentLocation = {
+  environment: TableEnvironment
+  beginStart: number
+  beginEnd: number
+  endStart: number
+  endEnd: number
+}
+
+export const locateTableEnvironment = (
+  source: string
+): TableEnvironmentLocation => {
+  const tokens = source.matchAll(
+    /\\(begin|end)\{(tabularx|tabular|longtable)\}/g
+  )
+  const stack: Array<{
+    environment: TableEnvironment
+    beginStart: number
+    beginEnd: number
+  }> = []
+  const roots: TableEnvironmentLocation[] = []
+
+  for (const token of tokens) {
+    const kind = token[1]
+    const environment = token[2] as TableEnvironment
+    const start = token.index ?? 0
+    if (kind === 'begin') {
+      stack.push({
+        environment,
+        beginStart: start,
+        beginEnd: start + token[0].length,
+      })
+      continue
+    }
+
+    const opening = stack.pop()
+    if (!opening || opening.environment !== environment) {
+      throw new Error('The supported LaTeX table environment is not balanced.')
+    }
+    if (!stack.length) {
+      roots.push({
+        ...opening,
+        endStart: start,
+        endEnd: start + token[0].length,
+      })
+    }
+  }
+
+  if (stack.length) {
+    throw new Error(`Missing \\end{${stack[0].environment}}`)
+  }
+  if (roots.length !== 1) {
+    throw new Error('Enter exactly one supported LaTeX table environment.')
+  }
+  return roots[0]
+}
+
 export const parseLatexTable = (
   source: string,
   allowUnsafe = false
 ): ParseResult => {
   const diagnostics: Diagnostic[] = []
-  const environmentMatch = source.match(
-    /\\begin\{(tabularx|tabular|longtable)\}/
-  )
-  if (!environmentMatch) throw new Error('No supported table environment found')
-  const environment = environmentMatch[1] as TableEnvironment
-  let cursor = environmentMatch.index! + environmentMatch[0].length
+  const location = locateTableEnvironment(source)
+  const environment = location.environment
+  let cursor = location.beginEnd
   let targetWidth = '\\textwidth'
   if (environment === 'tabularx') {
     while (/\s/.test(source[cursor])) cursor++
@@ -449,22 +502,28 @@ export const parseLatexTable = (
   while (/\s/.test(source[cursor])) cursor++
   const specification = readBalanced(source, cursor)
   const { columns, verticalBoundaries } = parseColumns(specification.value)
-  const endMarker = `\\end{${environment}}`
-  const end = source.indexOf(endMarker, specification.end)
-  if (end < 0) throw new Error(`Missing ${endMarker}`)
-  let body = source.slice(specification.end, end)
+  const body = source.slice(specification.end, location.endStart)
   const unsafeCommands = body.match(
     /\\(cmidrule|specialrule|addlinespace|rowcolor|hhline|endfirsthead|endhead|endfoot|endlastfoot)\b/g
   )
-  let unsafe = Boolean(unsafeCommands)
-  if (unsafe) {
+  const wrapperSource =
+    source.slice(0, location.beginStart) + source.slice(location.endEnd)
+  const unsafeWrapperCommands = wrapperSource.match(/\\setlength\b/g)
+  let unsafe = Boolean(unsafeCommands || unsafeWrapperCommands)
+  if (unsafeCommands) {
     diagnostics.push({
       severity: 'warning',
       message: `The table contains unsupported structure: ${[...new Set(unsafeCommands)].join(', ')}`,
     })
-    if (!allowUnsafe) {
-      return { model: createTableModel(), diagnostics, unsafe: true }
-    }
+  }
+  if (unsafeWrapperCommands) {
+    diagnostics.push({
+      severity: 'warning',
+      message: `The table wrapper contains unsupported structure: ${[...new Set(unsafeWrapperCommands)].join(', ')}`,
+    })
+  }
+  if (unsafe && !allowUnsafe) {
+    return { model: createTableModel(), diagnostics, unsafe: true }
   }
   const rawRows: string[] = []
   const rulesAtBoundary = new Map<number, Array<readonly [number, number]>>()
@@ -496,8 +555,14 @@ export const parseLatexTable = (
     ? 'booktabs'
     : 'default'
   model.options.centered = /\\centering\b/.test(source)
+  const wrapper = source.match(/\\begin\{table\}(?:\[([^\]]*)\])?/)
+  if (wrapper?.[1] !== undefined) {
+    model.options.placement = wrapper[1]
+  }
   model.options.caption = source.match(/\\caption\{([^{}]*)\}/)?.[1] ?? ''
-  model.options.label = source.match(/\\label\{([^{}]*)\}/)?.[1] ?? ''
+  model.options.label = (
+    source.match(/\\label\{([^{}]*)\}/)?.[1] ?? ''
+  ).replace(/\\([&%$#_{}])/g, '$1')
   model.options.scale = /\\resizebox\{\\textwidth\}/.test(source)
     ? 'textwidth'
     : /\\resizebox\{\\columnwidth\}/.test(source)

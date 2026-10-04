@@ -102,6 +102,24 @@ describe('Visual Table Editor core', function () {
     expect(cellAt(result.model, 1, 0)).to.deep.include({ rowSpan: 2 })
   })
 
+  it('matches the outer table ending when a cell contains a nested table', function () {
+    const source = [
+      '\\begin{tabular}{cc}',
+      '\\textbf{\\begin{tabular}{c}Inner\\\\Heading\\end{tabular}} & Score \\\\',
+      'Entry & 4 \\\\',
+      '\\end{tabular}',
+    ].join('\n')
+    const result = parseLatexTable(source)
+
+    expect(result.unsafe).to.equal(false)
+    expect(result.model.rows).to.have.length(2)
+    expect(result.model.columns).to.have.length(2)
+    expect(cellAt(result.model, 0, 0)?.content.rawLatex).to.contain(
+      '\\begin{tabular}'
+    )
+    expect(cellAt(result.model, 1, 1)?.content.text).to.equal('4')
+  })
+
   it('warns before unsafe import and preserves opaque cell LaTeX', function () {
     const unsafe = parseLatexTable(String.raw`\begin{tabular}{cc}
 A & B \\ \cmidrule{1-2}

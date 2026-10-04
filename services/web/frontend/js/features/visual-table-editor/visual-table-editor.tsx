@@ -1,8 +1,8 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { EditorView } from '@codemirror/view'
 import {
-  ChangeEvent,
   KeyboardEvent,
+  ReactNode,
   PointerEvent,
   useCallback,
   useEffect,
@@ -11,6 +11,7 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Alert } from 'react-bootstrap'
 import {
   OLModal,
   OLModalBody,
@@ -19,9 +20,12 @@ import {
   OLModalTitle,
 } from '@/shared/components/ol/ol-modal'
 import OLButton from '@/shared/components/ol/ol-button'
+import OLFormCheckbox from '@/shared/components/ol/ol-form-checkbox'
+import OLFormControl from '@/shared/components/ol/ol-form-control'
+import OLFormSelect from '@/shared/components/ol/ol-form-select'
+import { useFeatureFlag } from '@/shared/context/split-test-context'
 import {
   detectDelimiter,
-  exportCsv,
   parseDelimited,
   parseHtmlTable,
   parseSpreadsheetClipboard,
@@ -60,6 +64,11 @@ import { useFileTreePathContext } from '@/features/file-tree/contexts/file-tree-
 import VisualTableToolbarButton, {
   VisualTableColorPicker,
 } from './components/visual-table-toolbar-button'
+import VisualTableImportPanel from './components/visual-table-import-panel'
+import VisualTableConfirmationDialog from './components/visual-table-confirmation-dialog'
+import VisualTablePasteSpecialDialog, {
+  PasteSpecialDelimiter,
+} from './components/visual-table-paste-special-dialog'
 import useTableSelection from './hooks/use-table-selection'
 import {
   CellPoint,
@@ -70,19 +79,17 @@ import {
 } from './types'
 import './visual-table-editor.scss'
 
+type ConfirmationRequest = {
+  confirmLabel: string
+  message: ReactNode
+  resolve: (confirmed: boolean) => void
+  title: string
+}
+
 type Props = {
   initialSession: EditorSession
   view: EditorView
   onClose: () => void
-}
-
-const download = (filename: string, content: string, type: string) => {
-  const url = URL.createObjectURL(new Blob([content], { type }))
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = filename
-  anchor.click()
-  URL.revokeObjectURL(url)
 }
 
 const clampPoint = (model: TableModel, point: CellPoint): CellPoint => ({
@@ -96,6 +103,7 @@ export default function VisualTableEditor({
   onClose,
 }: Props) {
   const { t } = useTranslation()
+  const themed = useFeatureFlag('themed-modals')
   const { project, projectSnapshot } = useProjectContext()
   const { currentDocumentId } = useEditorOpenDocContext()
   const { openDocs } = useEditorManagerContext()
@@ -114,8 +122,13 @@ export default function VisualTableEditor({
   const [numberPrecision, setNumberPrecision] = useState(2)
   const [numberGrouping, setNumberGrouping] = useState(true)
   const [decimalSeparator, setDecimalSeparator] = useState<'.' | ','>('.')
+  const [importOpen, setImportOpen] = useState(false)
+  const [moreOptionsOpen, setMoreOptionsOpen] = useState(false)
+  const [pasteSpecialOpen, setPasteSpecialOpen] = useState(false)
+  const [confirmation, setConfirmation] = useState<ConfirmationRequest | null>(
+    null
+  )
   const viewportRef = useRef<HTMLDivElement>(null)
-  const csvInputRef = useRef<HTMLInputElement>(null)
   const { beginSelection, extendSelection, isSelecting } = useTableSelection({
     columnCount: model.columns.length,
     gridRef: viewportRef,
@@ -354,28 +367,37 @@ export default function VisualTableEditor({
   const selectedRange = normalizeSelection(selection)
   const columnTemplate = `44px repeat(${model.columns.length}, minmax(110px, 1fr))`
 
-  const importCsv = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    const contents = await file.text()
-    apply(current =>
-      pasteMatrix(
-        current,
-        { row: 0, column: 0 },
-        parseDelimited(contents, detectDelimiter(contents))
-      )
-    )
-    event.target.value = ''
+  const completeImport = (importedModel: TableModel) => {
+    apply(() => importedModel)
+    setSelection({
+      from: { row: 0, column: 0 },
+      to: { row: 0, column: 0 },
+    })
+    setEditing(null)
+    setUnsafeReview(false)
+    setImportOpen(false)
+  }
+
+  const requestConfirmation = useCallback(
+    (request: Omit<ConfirmationRequest, 'resolve'>) =>
+      new Promise<boolean>(resolve => setConfirmation({ ...request, resolve })),
+    []
+  )
+
+  const closeConfirmation = (confirmed: boolean) => {
+    confirmation?.resolve(confirmed)
+    setConfirmation(null)
   }
 
   function pasteSpecial() {
-    const value = window.prompt('Paste text to split into cells:')
-    if (value == null) return
-    const delimiter = window.prompt(
-      'Delimiter: tab, comma, semicolon, whitespace, line, or custom',
-      'tab'
-    )
-    if (delimiter == null) return
+    setPasteSpecialOpen(true)
+  }
+
+  const completePasteSpecial = (
+    value: string,
+    delimiter: PasteSpecialDelimiter,
+    customDelimiter: string
+  ) => {
     const resolved =
       delimiter === 'tab'
         ? '\t'
@@ -387,12 +409,13 @@ export default function VisualTableEditor({
               ? /\s+/
               : delimiter === 'line'
                 ? '\n'
-                : delimiter
+                : customDelimiter
     const matrix =
       delimiter === 'line'
         ? value.split(/\r?\n/).map(item => [item])
         : parseDelimited(value, resolved)
     apply(current => pasteMatrix(current, selection.to, matrix))
+    setPasteSpecialOpen(false)
   }
 
   const resizeColumn = (
@@ -447,9 +470,12 @@ export default function VisualTableEditor({
     }
     if (
       model.unsafeImport &&
-      !window.confirm(
-        'This is an unsafe import. Confirm again that you want to replace the original source with the generated LaTeX shown in the diff preview.'
-      )
+      !(await requestConfirmation({
+        title: 'Replace unsupported LaTeX?',
+        message:
+          'The original table contains unsupported structure. Confirm that you want to replace it with the generated LaTeX shown in the diff preview.',
+        confirmLabel: 'Replace source',
+      }))
     )
       return
     if (generated.packages.length) {
@@ -493,9 +519,16 @@ export default function VisualTableEditor({
             })
             .join('\n\n')
           if (
-            !window.confirm(
-              `The generated table requires package changes:\n\n${description}\n\nApply these changes?`
-            )
+            !(await requestConfirmation({
+              title: 'Insert required packages?',
+              message: (
+                <div>
+                  <p>The generated table requires these package changes:</p>
+                  <pre className="vte-confirmation-code">{description}</pre>
+                </div>
+              ),
+              confirmLabel: 'Insert packages',
+            }))
           )
             return
 
@@ -587,6 +620,8 @@ export default function VisualTableEditor({
       keyboard={false}
       clickOutsideDeactivates={false}
       size="lg"
+      scrollable
+      themed={themed}
       fullscreen="lg-down"
       className="visual-table-editor-modal"
     >
@@ -852,302 +887,317 @@ export default function VisualTableEditor({
               }
             />
           </div>
+          <div className="vte-toolbar-group" role="group" aria-label="View">
+            <VisualTableToolbarButton
+              tooltipId="vte-toggle-latex-preview"
+              icon={sourceVisible ? 'visibility_off' : 'visibility'}
+              label={` LaTeX preview`}
+              active={sourceVisible}
+              onClick={() => setSourceVisible(value => !value)}
+            />
+          </div>
+          <div
+            className="vte-toolbar-group vte-toolbar-group-more"
+            role="group"
+            aria-label="More options"
+          >
+            <VisualTableToolbarButton
+              tooltipId="vte-more-options"
+              icon="tune"
+              label={
+                moreOptionsOpen ? 'Hide more options' : 'Show more options'
+              }
+              active={moreOptionsOpen}
+              onClick={() => setMoreOptionsOpen(open => !open)}
+            />
+          </div>
         </div>
 
-        <div className="vte-options">
-          <div
-            className="vte-options-group"
-            role="group"
-            aria-label="Table settings"
-          >
-            <label>
-              Environment{' '}
-              <select
-                value={model.options.environment}
-                onChange={event =>
-                  setOption(
-                    'environment',
-                    event.target.value as TableModel['options']['environment']
+        {moreOptionsOpen && (
+          <div className="vte-options">
+            <div
+              className="vte-options-group"
+              role="group"
+              aria-label="Table settings"
+            >
+              <label>
+                Environment{' '}
+                <OLFormSelect
+                  size="sm"
+                  value={model.options.environment}
+                  onChange={event =>
+                    setOption(
+                      'environment',
+                      event.target.value as TableModel['options']['environment']
+                    )
+                  }
+                >
+                  <option value="tabular">tabular</option>
+                  <option value="tabularx">tabularx</option>
+                  <option value="longtable">longtable</option>
+                </OLFormSelect>
+              </label>
+              <label>
+                Style{' '}
+                <OLFormSelect
+                  size="sm"
+                  value={model.options.style}
+                  onChange={event =>
+                    apply(current => {
+                      const style = event.target.value as 'default' | 'booktabs'
+                      const wholeTable = {
+                        from: { row: 0, column: 0 },
+                        to: {
+                          row: current.rows.length - 1,
+                          column: current.columns.length - 1,
+                        },
+                      }
+                      const next = applyBorders(
+                        current,
+                        wholeTable,
+                        style === 'default' ? 'all' : 'none'
+                      )
+                      next.options.style = style
+                      return next
+                    })
+                  }
+                >
+                  <option value="default">Default</option>
+                  <option value="booktabs">Booktabs</option>
+                </OLFormSelect>
+              </label>
+              <label>
+                Scale{' '}
+                <OLFormSelect
+                  size="sm"
+                  value={model.options.scale}
+                  onChange={event =>
+                    setOption(
+                      'scale',
+                      event.target.value as TableModel['options']['scale']
+                    )
+                  }
+                >
+                  <option value="none">None</option>
+                  <option value="textwidth">Text width</option>
+                  <option value="columnwidth">Column width</option>
+                </OLFormSelect>
+              </label>
+              <OLFormCheckbox
+                id="vte-center-table"
+                label="Center table"
+                checked={model.options.centered}
+                onChange={event => setOption('centered', event.target.checked)}
+              />
+              <label>
+                Caption{' '}
+                <OLFormControl
+                  size="sm"
+                  value={model.options.caption}
+                  onChange={event => setOption('caption', event.target.value)}
+                />
+              </label>
+              <label>
+                Label{' '}
+                <OLFormControl
+                  size="sm"
+                  value={model.options.label}
+                  onChange={event => setOption('label', event.target.value)}
+                />
+              </label>
+            </div>
+            <div
+              className="vte-options-group"
+              role="group"
+              aria-label="Find and replace"
+            >
+              <label>
+                Find{' '}
+                <OLFormControl
+                  size="sm"
+                  value={find}
+                  onChange={event => setFind(event.target.value)}
+                />
+              </label>
+              <label>
+                Replace{' '}
+                <OLFormControl
+                  size="sm"
+                  value={replace}
+                  onChange={event => setReplace(event.target.value)}
+                />
+              </label>
+              <VisualTableToolbarButton
+                tooltipId="vte-previous-match"
+                icon="keyboard_arrow_up"
+                label="Previous match"
+                disabled={!matches.length}
+                onClick={() => navigateMatch(-1)}
+              />
+              <VisualTableToolbarButton
+                tooltipId="vte-next-match"
+                icon="keyboard_arrow_down"
+                label="Next match"
+                disabled={!matches.length}
+                onClick={() => navigateMatch(1)}
+              />
+              <VisualTableToolbarButton
+                tooltipId="vte-replace-current"
+                icon="find_replace"
+                label="Replace current match"
+                disabled={!matches.length || matchIndex < 0}
+                onClick={() => {
+                  const match = matches[matchIndex]
+                  if (!match) return
+                  const target = {
+                    from: { row: match.row, column: match.column },
+                    to: { row: match.row, column: match.column },
+                  }
+                  apply(current =>
+                    replaceText(current, find, replace, target, false)
+                  )
+                }}
+              />
+              <VisualTableToolbarButton
+                tooltipId="vte-replace-selected"
+                icon="select_all"
+                label="Replace in selected cells"
+                onClick={() =>
+                  find &&
+                  apply(current =>
+                    replaceText(current, find, replace, selection, true)
                   )
                 }
-              >
-                <option value="tabular">tabular</option>
-                <option value="tabularx">tabularx</option>
-                <option value="longtable">longtable</option>
-              </select>
-            </label>
-            <label>
-              Style{' '}
-              <select
-                value={model.options.style}
-                onChange={event =>
-                  apply(current => {
-                    const style = event.target.value as 'default' | 'booktabs'
-                    const wholeTable = {
-                      from: { row: 0, column: 0 },
-                      to: {
-                        row: current.rows.length - 1,
-                        column: current.columns.length - 1,
-                      },
-                    }
-                    const next = applyBorders(
+              />
+              <VisualTableToolbarButton
+                tooltipId="vte-replace-all"
+                icon="published_with_changes"
+                label="Replace all"
+                onClick={() =>
+                  find &&
+                  apply(current =>
+                    replaceText(current, find, replace, undefined, true)
+                  )
+                }
+              />
+            </div>
+            <div
+              className="vte-options-group"
+              role="group"
+              aria-label="Number formatting"
+            >
+              <label>
+                Decimals{' '}
+                <OLFormControl
+                  size="sm"
+                  type="number"
+                  min="0"
+                  max="12"
+                  value={numberPrecision}
+                  onChange={event =>
+                    setNumberPrecision(Number(event.target.value))
+                  }
+                />
+              </label>
+              <OLFormCheckbox
+                id="vte-number-grouping"
+                label="Thousands separator"
+                checked={numberGrouping}
+                onChange={event => setNumberGrouping(event.target.checked)}
+              />
+              <label>
+                Decimal{' '}
+                <OLFormSelect
+                  size="sm"
+                  value={decimalSeparator}
+                  onChange={event =>
+                    setDecimalSeparator(event.target.value as '.' | ',')
+                  }
+                >
+                  <option value=".">.</option>
+                  <option value=",">,</option>
+                </OLFormSelect>
+              </label>
+              <VisualTableToolbarButton
+                tooltipId="vte-format-numbers"
+                icon="number"
+                label="Format numbers"
+                onClick={() =>
+                  apply(current =>
+                    formatNumbers(
                       current,
-                      wholeTable,
-                      style === 'default' ? 'all' : 'none'
+                      selection,
+                      numberPrecision,
+                      numberGrouping,
+                      decimalSeparator
                     )
-                    next.options.style = style
+                  )
+                }
+              />
+            </div>
+            <div
+              className="vte-options-group"
+              role="group"
+              aria-label="Data operations"
+            >
+              <VisualTableToolbarButton
+                tooltipId="vte-repeating-header"
+                icon="repeat"
+                label="Toggle repeating header"
+                onClick={() =>
+                  apply(current => {
+                    const next = structuredClone(current)
+                    for (
+                      let row = selectedRange.minRow;
+                      row <= selectedRange.maxRow;
+                      row++
+                    ) {
+                      next.rows[row].repeatOnNewPage =
+                        !next.rows[row].repeatOnNewPage
+                    }
                     return next
                   })
                 }
-              >
-                <option value="default">Default</option>
-                <option value="booktabs">Booktabs</option>
-              </select>
-            </label>
-            <label>
-              Scale{' '}
-              <select
-                value={model.options.scale}
-                onChange={event =>
-                  setOption(
-                    'scale',
-                    event.target.value as TableModel['options']['scale']
-                  )
-                }
-              >
-                <option value="none">None</option>
-                <option value="textwidth">Text width</option>
-                <option value="columnwidth">Column width</option>
-              </select>
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={model.options.centered}
-                onChange={event => setOption('centered', event.target.checked)}
-              />{' '}
-              Center table
-            </label>
-            <label>
-              Caption{' '}
-              <input
-                value={model.options.caption}
-                onChange={event => setOption('caption', event.target.value)}
               />
-            </label>
-            <label>
-              Label{' '}
-              <input
-                value={model.options.label}
-                onChange={event => setOption('label', event.target.value)}
-              />
-            </label>
-          </div>
-          <div
-            className="vte-options-group"
-            role="group"
-            aria-label="Find and replace"
-          >
-            <label>
-              Find{' '}
-              <input
-                value={find}
-                onChange={event => setFind(event.target.value)}
-              />
-            </label>
-            <label>
-              Replace{' '}
-              <input
-                value={replace}
-                onChange={event => setReplace(event.target.value)}
-              />
-            </label>
-            <VisualTableToolbarButton
-              tooltipId="vte-previous-match"
-              icon="keyboard_arrow_up"
-              label="Previous match"
-              disabled={!matches.length}
-              onClick={() => navigateMatch(-1)}
-            />
-            <VisualTableToolbarButton
-              tooltipId="vte-next-match"
-              icon="keyboard_arrow_down"
-              label="Next match"
-              disabled={!matches.length}
-              onClick={() => navigateMatch(1)}
-            />
-            <VisualTableToolbarButton
-              tooltipId="vte-replace-current"
-              icon="find_replace"
-              label="Replace current match"
-              disabled={!matches.length || matchIndex < 0}
-              onClick={() => {
-                const match = matches[matchIndex]
-                if (!match) return
-                const target = {
-                  from: { row: match.row, column: match.column },
-                  to: { row: match.row, column: match.column },
-                }
-                apply(current =>
-                  replaceText(current, find, replace, target, false)
-                )
-              }}
-            />
-            <VisualTableToolbarButton
-              tooltipId="vte-replace-selected"
-              icon="select_all"
-              label="Replace in selected cells"
-              onClick={() =>
-                find &&
-                apply(current =>
-                  replaceText(current, find, replace, selection, true)
-                )
-              }
-            />
-            <VisualTableToolbarButton
-              tooltipId="vte-replace-all"
-              icon="published_with_changes"
-              label="Replace all"
-              onClick={() =>
-                find &&
-                apply(current =>
-                  replaceText(current, find, replace, undefined, true)
-                )
-              }
-            />
-          </div>
-          <div
-            className="vte-options-group"
-            role="group"
-            aria-label="Number formatting"
-          >
-            <label>
-              Decimals{' '}
-              <input
-                type="number"
-                min="0"
-                max="12"
-                value={numberPrecision}
-                onChange={event =>
-                  setNumberPrecision(Number(event.target.value))
-                }
-              />
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={numberGrouping}
-                onChange={event => setNumberGrouping(event.target.checked)}
-              />{' '}
-              Thousands separator
-            </label>
-            <label>
-              Decimal{' '}
-              <select
-                value={decimalSeparator}
-                onChange={event =>
-                  setDecimalSeparator(event.target.value as '.' | ',')
-                }
-              >
-                <option value=".">.</option>
-                <option value=",">,</option>
-              </select>
-            </label>
-            <VisualTableToolbarButton
-              tooltipId="vte-format-numbers"
-              icon="number"
-              label="Format numbers"
-              onClick={() =>
-                apply(current =>
-                  formatNumbers(
-                    current,
-                    selection,
-                    numberPrecision,
-                    numberGrouping,
-                    decimalSeparator
-                  )
-                )
-              }
-            />
-          </div>
-          <div
-            className="vte-options-group"
-            role="group"
-            aria-label="Data operations"
-          >
-            <VisualTableToolbarButton
-              tooltipId="vte-repeating-header"
-              icon="repeat"
-              label="Toggle repeating header"
-              onClick={() =>
-                apply(current => {
-                  const next = structuredClone(current)
-                  for (
-                    let row = selectedRange.minRow;
-                    row <= selectedRange.maxRow;
-                    row++
-                  ) {
-                    next.rows[row].repeatOnNewPage =
-                      !next.rows[row].repeatOnNewPage
-                  }
-                  return next
-                })
-              }
-            />
-            <label>
-              <input
-                type="checkbox"
+              <OLFormCheckbox
+                id="vte-preserve-paste-formatting"
+                label="Preserve paste formatting"
                 checked={preservePasteFormatting}
                 onChange={event =>
                   setPreservePasteFormatting(event.target.checked)
                 }
-              />{' '}
-              Preserve paste formatting
-            </label>
-            <VisualTableToolbarButton
-              tooltipId="vte-paste-special"
-              icon="content_paste"
-              label="Paste special"
-              onClick={pasteSpecial}
-            />
-            <VisualTableToolbarButton
-              tooltipId="vte-import-csv"
-              icon="upload"
-              label="Import CSV"
-              onClick={() => csvInputRef.current?.click()}
-            />
-            <VisualTableToolbarButton
-              tooltipId="vte-export-csv"
-              icon="download"
-              label="Export CSV"
-              onClick={() =>
-                download(
-                  'table.csv',
-                  exportCsv(model),
-                  'text/csv;charset=utf-8'
-                )
-              }
-            />
-            <input
-              ref={csvInputRef}
-              hidden
-              type="file"
-              accept=".csv,text/csv"
-              onChange={importCsv}
-            />
-          </div>
-        </div>
-
-        {error && (
-          <div className="alert alert-danger" role="alert">
-            {error}
+              />
+              <VisualTableToolbarButton
+                tooltipId="vte-paste-special"
+                icon="content_paste"
+                label="Paste special"
+                onClick={pasteSpecial}
+              />
+              <VisualTableToolbarButton
+                tooltipId="vte-import"
+                icon="upload_file"
+                label="Import"
+                active={importOpen}
+                onClick={() => setImportOpen(open => !open)}
+              />
+            </div>
           </div>
         )}
+
+        {importOpen && (
+          <VisualTableImportPanel
+            themed={themed}
+            onCancel={() => setImportOpen(false)}
+            onImport={completeImport}
+          />
+        )}
+
+        {error && <Alert variant="danger">{error}</Alert>}
         {model.unsafeImport && (
-          <div className="alert alert-warning">
-            Unsafe import: unsupported source may be rewritten. Saving requires
-            a second confirmation and diff review.
-          </div>
+          <Alert variant="warning">
+            <strong>Unsupported LaTeX structure.</strong> The source may be
+            rewritten. Saving requires a diff review and a second confirmation.
+          </Alert>
         )}
 
         <div className="vte-workspace">
@@ -1199,7 +1249,8 @@ export default function VisualTableEditor({
                       apply(current => moveColumn(current, index, index + 1))
                     }
                   />
-                  <select
+                  <OLFormSelect
+                    size="sm"
                     aria-label={`Width for column ${index + 1}`}
                     value={column.width.mode}
                     onChange={event =>
@@ -1218,9 +1269,10 @@ export default function VisualTableEditor({
                     <option value="auto">Auto</option>
                     <option value="fixed">Fixed</option>
                     <option value="flex">Flex</option>
-                  </select>
+                  </OLFormSelect>
                   {column.width.mode === 'fixed' && (
-                    <input
+                    <OLFormControl
+                      size="sm"
                       className="vte-width-input"
                       aria-label={`Explicit width for column ${index + 1}`}
                       type="number"
@@ -1360,7 +1412,8 @@ export default function VisualTableEditor({
                         }
                       >
                         {isEditing ? (
-                          <textarea
+                          <OLFormControl
+                            as="textarea"
                             autoFocus
                             value={
                               cell.content.text || cell.content.rawLatex || ''
@@ -1428,14 +1481,6 @@ export default function VisualTableEditor({
             </div>
           )}
         </div>
-        <VisualTableToolbarButton
-          tooltipId="vte-toggle-latex-preview"
-          icon={sourceVisible ? 'visibility_off' : 'visibility'}
-          label={`${sourceVisible ? 'Hide' : 'Show'} LaTeX preview`}
-          active={sourceVisible}
-          className="vte-preview-toggle"
-          onClick={() => setSourceVisible(value => !value)}
-        />
         {unsafeReview && (
           <div className="vte-unsafe-review">
             <h3>Mandatory unsafe-import diff review</h3>
@@ -1464,6 +1509,21 @@ export default function VisualTableEditor({
               : 'Save'}
         </OLButton>
       </OLModalFooter>
+      <VisualTablePasteSpecialDialog
+        show={pasteSpecialOpen}
+        themed={themed}
+        onCancel={() => setPasteSpecialOpen(false)}
+        onPaste={completePasteSpecial}
+      />
+      <VisualTableConfirmationDialog
+        show={Boolean(confirmation)}
+        themed={themed}
+        title={confirmation?.title ?? 'Confirm action'}
+        message={confirmation?.message}
+        confirmLabel={confirmation?.confirmLabel ?? 'Confirm'}
+        onCancel={() => closeConfirmation(false)}
+        onConfirm={() => closeConfirmation(true)}
+      />
     </OLModal>
   )
 }
