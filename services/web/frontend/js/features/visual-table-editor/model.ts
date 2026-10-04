@@ -244,37 +244,127 @@ export const deleteColumns = (model: TableModel, from: number, to: number) => {
   return next
 }
 
-export const moveRow = (model: TableModel, from: number, to: number) => {
-  if (from === to) return model
-  const expanded = getCells(model).some(cell => cell.rowSpan > 1)
-  if (expanded)
-    throw new Error('Split vertically merged cells before moving rows')
-  const next = cloneModel(model)
-  const [row] = next.rows.splice(from, 1)
-  next.rows.splice(to, 0, row)
-  for (const cell of getCells(next)) {
-    if (cell.row === from) cell.row = to
-    else if (from < to && cell.row > from && cell.row <= to) cell.row--
-    else if (from > to && cell.row >= to && cell.row < from) cell.row++
+type ReorderAxis = 'row' | 'column'
+
+const reorderError = (
+  model: TableModel,
+  axis: ReorderAxis,
+  from: number,
+  to: number,
+  insertionIndex: number
+) => {
+  const count = axis === 'row' ? model.rows.length : model.columns.length
+  if (
+    from < 0 ||
+    to < from ||
+    to >= count ||
+    insertionIndex < 0 ||
+    insertionIndex > count
+  ) {
+    return 'Invalid table reorder range'
   }
+  if (insertionIndex >= from && insertionIndex <= to + 1) return null
+
+  for (const cell of getCells(model)) {
+    const start = axis === 'row' ? cell.row : cell.column
+    const span = axis === 'row' ? cell.rowSpan : cell.columnSpan
+    if (span === 1) continue
+    const end = start + span - 1
+    const intersectsSource = start <= to && end >= from
+    const containedInSource = start >= from && end <= to
+    if (intersectsSource && !containedInSource) {
+      return 'This move would split a merged cell.'
+    }
+    if (!containedInSource && insertionIndex > start && insertionIndex <= end) {
+      return 'You cannot drop here because this position is inside a merged cell.'
+    }
+  }
+  return null
+}
+
+export const getRowMoveError = (
+  model: TableModel,
+  from: number,
+  to: number,
+  insertionIndex: number
+) => reorderError(model, 'row', from, to, insertionIndex)
+
+export const getColumnMoveError = (
+  model: TableModel,
+  from: number,
+  to: number,
+  insertionIndex: number
+) => reorderError(model, 'column', from, to, insertionIndex)
+
+const reorderRange = (
+  model: TableModel,
+  axis: ReorderAxis,
+  from: number,
+  to: number,
+  insertionIndex: number
+) => {
+  const error = reorderError(model, axis, from, to, insertionIndex)
+  if (error) throw new Error(error)
+  if (insertionIndex >= from && insertionIndex <= to + 1) return model
+
+  const next = cloneModel(model)
+  const count = axis === 'row' ? next.rows.length : next.columns.length
+  const movedCount = to - from + 1
+  const order = Array.from({ length: count }, (_, index) => index)
+  const moved = order.splice(from, movedCount)
+  const target =
+    insertionIndex > to ? insertionIndex - movedCount : insertionIndex
+  order.splice(target, 0, ...moved)
+
+  if (axis === 'row') {
+    const oldRows = [...next.rows]
+    next.rows = order.map(index => oldRows[index])
+  } else {
+    const oldColumns = [...next.columns]
+    next.columns = order.map(index => oldColumns[index])
+  }
+
+  const newIndex = new Map(order.map((oldIndex, index) => [oldIndex, index]))
+  for (const cell of getCells(next)) {
+    const start = axis === 'row' ? cell.row : cell.column
+    const span = axis === 'row' ? cell.rowSpan : cell.columnSpan
+    const mapped = Array.from(
+      { length: span },
+      (_, offset) => newIndex.get(start + offset)!
+    ).sort((a, b) => a - b)
+    if (
+      mapped.some(
+        (index, offset) => offset > 0 && index !== mapped[offset - 1] + 1
+      )
+    ) {
+      throw new Error('This move would split a merged cell.')
+    }
+    if (axis === 'row') cell.row = mapped[0]
+    else cell.column = mapped[0]
+  }
+  assertModel(next)
   return next
 }
 
-export const moveColumn = (model: TableModel, from: number, to: number) => {
-  if (from === to) return model
-  const expanded = getCells(model).some(cell => cell.columnSpan > 1)
-  if (expanded)
-    throw new Error('Split horizontally merged cells before moving columns')
-  const next = cloneModel(model)
-  const [column] = next.columns.splice(from, 1)
-  next.columns.splice(to, 0, column)
-  for (const cell of getCells(next)) {
-    if (cell.column === from) cell.column = to
-    else if (from < to && cell.column > from && cell.column <= to) cell.column--
-    else if (from > to && cell.column >= to && cell.column < from) cell.column++
-  }
-  return next
-}
+export const moveRows = (
+  model: TableModel,
+  from: number,
+  to: number,
+  insertionIndex: number
+) => reorderRange(model, 'row', from, to, insertionIndex)
+
+export const moveColumns = (
+  model: TableModel,
+  from: number,
+  to: number,
+  insertionIndex: number
+) => reorderRange(model, 'column', from, to, insertionIndex)
+
+export const moveRow = (model: TableModel, from: number, to: number) =>
+  moveRows(model, from, from, to > from ? to + 1 : to)
+
+export const moveColumn = (model: TableModel, from: number, to: number) =>
+  moveColumns(model, from, from, to > from ? to + 1 : to)
 
 export const transpose = (model: TableModel) => {
   const next = cloneModel(model)

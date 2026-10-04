@@ -225,8 +225,45 @@
 .vte-workspace {
   display: grid;
   grid-template-columns: minmax(400px, 7fr) minmax(280px, 3fr);
+  position: relative;
   gap: var(--spacing-05);
   min-height: 430px;
+}
+
+.vte-reorder-notice.notification {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 5;
+  width: min(calc(100% - 2 * var(--spacing-06)), 32rem);
+  pointer-events: none;
+  box-shadow: 0 4px 6px 0 #1e25301f;
+  transform: translate(-50%, -50%);
+  animation: vte-reorder-notice 2500ms ease-in-out forwards;
+}
+
+@keyframes vte-reorder-notice {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + var(--spacing-03)));
+  }
+
+  8%,
+  84% {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% - var(--spacing-03)));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vte-reorder-notice.notification {
+    animation: none;
+  }
 }
 
 .vte-grid {
@@ -250,6 +287,69 @@
     cursor: cell;
     user-select: none;
   }
+
+  &.reordering {
+    cursor: grabbing;
+    user-select: none;
+  }
+}
+
+.vte-drag-handle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--border-radius-base);
+  background: transparent;
+  color: var(--content-secondary-themed);
+  cursor: grab;
+  touch-action: none;
+
+  &:hover {
+    background: var(--bg-tertiary-themed);
+    color: var(--content-primary-themed);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--border-active-themed);
+    outline-offset: -2px;
+  }
+
+  .material-symbols {
+    font-size: 18px;
+  }
+
+  .reordering & {
+    cursor: grabbing;
+  }
+}
+
+.vte-reorder-source {
+  opacity: 0.55;
+}
+
+.vte-drop-indicator {
+  position: fixed;
+  z-index: 1065;
+  pointer-events: none;
+  background: var(--border-active-themed);
+  box-shadow: 0 0 0 1px var(--vte-surface);
+
+  &.invalid {
+    background: var(--border-danger-themed);
+  }
+}
+
+.vte-drop-indicator-rows {
+  height: 3px;
+}
+
+.vte-drop-indicator-columns {
+  width: 3px;
 }
 
 .vte-grid-header,
@@ -317,13 +417,16 @@
 @media (hover: hover) {
   .vte-column-header,
   .vte-row-header {
-    .vte-toolbar-button-wrapper {
+    .vte-toolbar-button-wrapper,
+    .vte-drag-handle {
       opacity: 0;
     }
 
     &:hover,
-    &:focus-within {
-      .vte-toolbar-button-wrapper {
+    &:focus-within,
+    &.selected {
+      .vte-toolbar-button-wrapper,
+      .vte-drag-handle {
         opacity: 1;
       }
     }

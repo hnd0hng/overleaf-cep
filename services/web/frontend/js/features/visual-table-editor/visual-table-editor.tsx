@@ -41,11 +41,13 @@ import {
   deleteColumns,
   deleteRows,
   formatNumbers,
+  getColumnMoveError,
+  getRowMoveError,
   insertColumn,
   insertRow,
   mergeSelection,
-  moveColumn,
-  moveRow,
+  moveColumns,
+  moveRows,
   normalizeSelection,
   pasteMatrix,
   replaceText,
@@ -69,7 +71,16 @@ import VisualTableConfirmationDialog from './components/visual-table-confirmatio
 import VisualTablePasteSpecialDialog, {
   PasteSpecialDelimiter,
 } from './components/visual-table-paste-special-dialog'
+import VisualTableDragHandle from './components/visual-table-drag-handle'
+import VisualTableReorderNotice from './components/visual-table-reorder-notice'
+import useTableReorder, {
+  reorderedRangeStart,
+  selectedReorderRange,
+  TableReorderAxis,
+  TableReorderOperation,
+} from './hooks/use-table-reorder'
 import useTableSelection from './hooks/use-table-selection'
+import useTransientNotice from './hooks/use-transient-notice'
 import {
   CellPoint,
   CellSelection,
@@ -366,6 +377,105 @@ export default function VisualTableEditor({
 
   const selectedRange = normalizeSelection(selection)
   const columnTemplate = `44px repeat(${model.columns.length}, minmax(110px, 1fr))`
+
+  const getReorderRange = useCallback(
+    (axis: TableReorderAxis, index: number) =>
+      selectedReorderRange(
+        axis,
+        index,
+        selection,
+        model.rows.length,
+        model.columns.length
+      ),
+    [model.columns.length, model.rows.length, selection]
+  )
+
+  const getReorderError = useCallback(
+    (operation: TableReorderOperation) =>
+      operation.axis === 'rows'
+        ? getRowMoveError(
+            model,
+            operation.from,
+            operation.to,
+            operation.insertionIndex
+          )
+        : getColumnMoveError(
+            model,
+            operation.from,
+            operation.to,
+            operation.insertionIndex
+          ),
+    [model]
+  )
+
+  const completeReorder = useCallback(
+    (operation: TableReorderOperation) => {
+      apply(current =>
+        operation.axis === 'rows'
+          ? moveRows(
+              current,
+              operation.from,
+              operation.to,
+              operation.insertionIndex
+            )
+          : moveColumns(
+              current,
+              operation.from,
+              operation.to,
+              operation.insertionIndex
+            )
+      )
+      const start = reorderedRangeStart(operation)
+      const end = start + operation.to - operation.from
+      setSelection(
+        operation.axis === 'rows'
+          ? {
+              from: { row: start, column: 0 },
+              to: { row: end, column: model.columns.length - 1 },
+            }
+          : {
+              from: { row: 0, column: start },
+              to: { row: model.rows.length - 1, column: end },
+            }
+      )
+      setEditing(null)
+    },
+    [apply, model.columns.length, model.rows.length]
+  )
+
+  const { notice: reorderNotice, showNotice: showReorderNotice } =
+    useTransientNotice()
+
+  const reorder = useTableReorder({
+    columnCount: model.columns.length,
+    getError: getReorderError,
+    getRange: getReorderRange,
+    gridRef: viewportRef,
+    onDrop: completeReorder,
+    onInvalidDrop: showReorderNotice,
+    rowCount: model.rows.length,
+  })
+
+  const moveReorderByKeyboard = useCallback(
+    (axis: TableReorderAxis, index: number, direction: -1 | 1) => {
+      const range = getReorderRange(axis, index)
+      const insertionIndex = direction === -1 ? range.from - 1 : range.to + 2
+      const count = axis === 'rows' ? model.rows.length : model.columns.length
+      if (insertionIndex < 0 || insertionIndex > count) return
+      const operation = { axis, ...range, insertionIndex }
+      const moveError = getReorderError(operation)
+      if (moveError) showReorderNotice(moveError)
+      else completeReorder(operation)
+    },
+    [
+      completeReorder,
+      getReorderError,
+      getReorderRange,
+      model.columns.length,
+      model.rows.length,
+      showReorderNotice,
+    ]
+  )
 
   const completeImport = (importedModel: TableModel) => {
     apply(() => importedModel)
@@ -1201,8 +1311,16 @@ export default function VisualTableEditor({
         )}
 
         <div className="vte-workspace">
+          {reorderNotice && (
+            <VisualTableReorderNotice
+              key={reorderNotice.id}
+              message={reorderNotice.message}
+            />
+          )}
           <div
-            className={`vte-grid ${isSelecting ? 'selecting' : ''}`}
+            className={`vte-grid ${isSelecting ? 'selecting' : ''} ${
+              reorder.drag ? 'reordering' : ''
+            }`}
             ref={viewportRef}
             tabIndex={0}
             onKeyDown={onKeyDown}
@@ -1214,7 +1332,14 @@ export default function VisualTableEditor({
               <div />
               {model.columns.map((column, index) => (
                 <div
+                  data-vte-column-index={index}
                   className={`vte-column-header ${
+                    reorder.drag?.axis === 'columns' &&
+                    index >= reorder.drag.from &&
+                    index <= reorder.drag.to
+                      ? 'vte-reorder-source '
+                      : ''
+                  }${
                     selectedRange.minRow === 0 &&
                     selectedRange.maxRow === model.rows.length - 1 &&
                     index >= selectedRange.minColumn &&
@@ -1230,25 +1355,14 @@ export default function VisualTableEditor({
                     extendSelection('columns', { row: 0, column: index }, event)
                   }
                 >
+                  <VisualTableDragHandle
+                    axis="columns"
+                    index={index}
+                    label={`Drag column ${index + 1}`}
+                    onKeyboardMove={moveReorderByKeyboard}
+                    onPointerDown={reorder.beginReorder}
+                  />
                   {index + 1}
-                  <VisualTableToolbarButton
-                    tooltipId={`vte-move-column-${index}-left`}
-                    icon="arrow_left_alt"
-                    label={`Move column ${index + 1} left`}
-                    disabled={index === 0}
-                    onClick={() =>
-                      apply(current => moveColumn(current, index, index - 1))
-                    }
-                  />
-                  <VisualTableToolbarButton
-                    tooltipId={`vte-move-column-${index}-right`}
-                    icon="arrow_right_alt"
-                    label={`Move column ${index + 1} right`}
-                    disabled={index === model.columns.length - 1}
-                    onClick={() =>
-                      apply(current => moveColumn(current, index, index + 1))
-                    }
-                  />
                   <OLFormSelect
                     size="sm"
                     aria-label={`Width for column ${index + 1}`}
@@ -1311,7 +1425,13 @@ export default function VisualTableEditor({
             >
               {rowVirtualizer.getVirtualItems().map(virtualRow => (
                 <div
-                  className="vte-row"
+                  className={`vte-row ${
+                    reorder.drag?.axis === 'rows' &&
+                    virtualRow.index >= reorder.drag.from &&
+                    virtualRow.index <= reorder.drag.to
+                      ? 'vte-reorder-source'
+                      : ''
+                  }`}
                   key={model.rows[virtualRow.index].id}
                   style={{
                     transform: `translateY(${virtualRow.start}px)`,
@@ -1342,37 +1462,14 @@ export default function VisualTableEditor({
                       )
                     }
                   >
+                    <VisualTableDragHandle
+                      axis="rows"
+                      index={virtualRow.index}
+                      label={`Drag row ${virtualRow.index + 1}`}
+                      onKeyboardMove={moveReorderByKeyboard}
+                      onPointerDown={reorder.beginReorder}
+                    />
                     {virtualRow.index + 1}
-                    <VisualTableToolbarButton
-                      tooltipId={`vte-move-row-${virtualRow.index}-up`}
-                      icon="arrow_upward"
-                      label={`Move row ${virtualRow.index + 1} up`}
-                      disabled={virtualRow.index === 0}
-                      onClick={() =>
-                        apply(current =>
-                          moveRow(
-                            current,
-                            virtualRow.index,
-                            virtualRow.index - 1
-                          )
-                        )
-                      }
-                    />
-                    <VisualTableToolbarButton
-                      tooltipId={`vte-move-row-${virtualRow.index}-down`}
-                      icon="arrow_downward"
-                      label={`Move row ${virtualRow.index + 1} down`}
-                      disabled={virtualRow.index === model.rows.length - 1}
-                      onClick={() =>
-                        apply(current =>
-                          moveRow(
-                            current,
-                            virtualRow.index,
-                            virtualRow.index + 1
-                          )
-                        )
-                      }
-                    />
                   </div>
                   {model.columns.map((_, column) => {
                     const cell = cellAt(model, virtualRow.index, column)!
@@ -1387,7 +1484,13 @@ export default function VisualTableEditor({
                     return (
                       <div
                         key={cell.id}
-                        className={`vte-cell ${selected ? 'selected' : ''}`}
+                        className={`vte-cell ${selected ? 'selected' : ''} ${
+                          reorder.drag?.axis === 'columns' &&
+                          column >= reorder.drag.from &&
+                          column <= reorder.drag.to
+                            ? 'vte-reorder-source'
+                            : ''
+                        }`}
                         style={{
                           gridColumn: `${column + 2} / span ${cell.columnSpan}`,
                           height: Math.max(40, cell.rowSpan * 42 - 2),
@@ -1460,6 +1563,15 @@ export default function VisualTableEditor({
                 </div>
               ))}
             </div>
+            {reorder.drag && (
+              <div
+                aria-hidden="true"
+                className={`vte-drop-indicator vte-drop-indicator-${
+                  reorder.drag.axis
+                } ${reorder.drag.valid ? '' : 'invalid'}`}
+                style={reorder.drag.indicatorStyle}
+              />
+            )}
           </div>
           {sourceVisible && (
             <div className="vte-source-preview">
