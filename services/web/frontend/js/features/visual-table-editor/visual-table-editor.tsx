@@ -73,6 +73,8 @@ import VisualTablePasteSpecialDialog, {
 } from './components/visual-table-paste-special-dialog'
 import VisualTableDragHandle from './components/visual-table-drag-handle'
 import VisualTableReorderNotice from './components/visual-table-reorder-notice'
+import VisualTableCellEditor from './components/visual-table-cell-editor'
+import { caretOffsetFromPoint, replacementTextForKey } from './cell-editing'
 import useTableReorder, {
   reorderedRangeStart,
   selectedReorderRange,
@@ -103,6 +105,11 @@ type Props = {
   onClose: () => void
 }
 
+type CellEditingSession = {
+  caretPosition: number
+  point: CellPoint
+}
+
 const clampPoint = (model: TableModel, point: CellPoint): CellPoint => ({
   row: Math.max(0, Math.min(model.rows.length - 1, point.row)),
   column: Math.max(0, Math.min(model.columns.length - 1, point.column)),
@@ -122,7 +129,7 @@ export default function VisualTableEditor({
   const history = useRef(new TableHistory(initialSession.model))
   const [model, setModel] = useState(initialSession.model)
   const [selection, setSelection] = useState(initialSession.selection)
-  const [editing, setEditing] = useState<CellPoint | null>(null)
+  const [editing, setEditing] = useState<CellEditingSession | null>(null)
   const [sourceVisible, setSourceVisible] = useState(true)
   const [unsafeReview, setUnsafeReview] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -245,9 +252,31 @@ export default function VisualTableEditor({
       pasteSpecial()
       return
     }
+    const replacement = replacementTextForKey({
+      altKey: event.altKey,
+      ctrlKey: event.ctrlKey,
+      isComposing: event.nativeEvent.isComposing,
+      key: event.key,
+      metaKey: event.metaKey,
+    })
+    if (replacement !== null) {
+      const cell = cellAt(model, selection.to.row, selection.to.column)
+      if (!cell) return
+      const point = { row: cell.row, column: cell.column }
+      event.preventDefault()
+      setSelection({ from: point, to: point })
+      apply(current => updateCellText(current, point, replacement))
+      setEditing({ caretPosition: replacement.length, point })
+      return
+    }
     if (event.key === 'Enter') {
       event.preventDefault()
-      setEditing(selection.to)
+      const cell = cellAt(model, selection.to.row, selection.to.column)
+      if (!cell) return
+      const point = { row: cell.row, column: cell.column }
+      const value = cell.content.text || cell.content.rawLatex || ''
+      setSelection({ from: point, to: point })
+      setEditing({ caretPosition: value.length, point })
       return
     }
     if (event.key === 'Delete' || event.key === 'Backspace') {
@@ -1479,8 +1508,8 @@ export default function VisualTableEditor({
                       item => item.id === cell.id
                     )
                     const isEditing =
-                      editing?.row === cell.row &&
-                      editing.column === cell.column
+                      editing?.point.row === cell.row &&
+                      editing.point.column === cell.column
                     return (
                       <div
                         key={cell.id}
@@ -1510,23 +1539,38 @@ export default function VisualTableEditor({
                             event
                           )
                         }
-                        onDoubleClick={() =>
-                          setEditing({ row: cell.row, column: cell.column })
-                        }
+                        onDoubleClick={event => {
+                          const point = {
+                            row: cell.row,
+                            column: cell.column,
+                          }
+                          const value =
+                            cell.content.text || cell.content.rawLatex || ''
+                          const caretPosition = caretOffsetFromPoint(
+                            event.currentTarget,
+                            event.clientX,
+                            event.clientY,
+                            value.length
+                          )
+                          setSelection({ from: point, to: point })
+                          setEditing({ caretPosition, point })
+                        }}
                       >
                         {isEditing ? (
-                          <OLFormControl
-                            as="textarea"
-                            autoFocus
+                          <VisualTableCellEditor
+                            ariaLabel={`Edit row ${cell.row + 1}, column ${
+                              cell.column + 1
+                            }`}
+                            initialCaretPosition={editing.caretPosition}
                             value={
                               cell.content.text || cell.content.rawLatex || ''
                             }
-                            onChange={event =>
+                            onChange={value =>
                               apply(current =>
                                 updateCellText(
                                   current,
                                   { row: cell.row, column: cell.column },
-                                  event.target.value
+                                  value
                                 )
                               )
                             }
