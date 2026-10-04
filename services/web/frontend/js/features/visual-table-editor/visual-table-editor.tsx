@@ -60,6 +60,7 @@ import { useFileTreePathContext } from '@/features/file-tree/contexts/file-tree-
 import VisualTableToolbarButton, {
   VisualTableColorPicker,
 } from './components/visual-table-toolbar-button'
+import useTableSelection from './hooks/use-table-selection'
 import {
   CellPoint,
   CellSelection,
@@ -115,6 +116,13 @@ export default function VisualTableEditor({
   const [decimalSeparator, setDecimalSeparator] = useState<'.' | ','>('.')
   const viewportRef = useRef<HTMLDivElement>(null)
   const csvInputRef = useRef<HTMLInputElement>(null)
+  const { beginSelection, extendSelection, isSelecting } = useTableSelection({
+    columnCount: model.columns.length,
+    gridRef: viewportRef,
+    rowCount: model.rows.length,
+    selection,
+    setSelection,
+  })
   const generated = useMemo(() => generateLatex(model), [model])
   const matches = useMemo(
     () =>
@@ -1144,7 +1152,7 @@ export default function VisualTableEditor({
 
         <div className="vte-workspace">
           <div
-            className="vte-grid"
+            className={`vte-grid ${isSelecting ? 'selecting' : ''}`}
             ref={viewportRef}
             tabIndex={0}
             onKeyDown={onKeyDown}
@@ -1156,13 +1164,20 @@ export default function VisualTableEditor({
               <div />
               {model.columns.map((column, index) => (
                 <div
-                  className="vte-column-header"
+                  className={`vte-column-header ${
+                    selectedRange.minRow === 0 &&
+                    selectedRange.maxRow === model.rows.length - 1 &&
+                    index >= selectedRange.minColumn &&
+                    index <= selectedRange.maxColumn
+                      ? 'selected'
+                      : ''
+                  }`}
                   key={column.id}
-                  onClick={() =>
-                    setSelection({
-                      from: { row: 0, column: index },
-                      to: { row: model.rows.length - 1, column: index },
-                    })
+                  onPointerDown={event =>
+                    beginSelection('columns', { row: 0, column: index }, event)
+                  }
+                  onPointerEnter={event =>
+                    extendSelection('columns', { row: 0, column: index }, event)
                   }
                 >
                   {index + 1}
@@ -1252,15 +1267,27 @@ export default function VisualTableEditor({
                   }}
                 >
                   <div
-                    className="vte-row-header"
-                    onClick={() =>
-                      setSelection({
-                        from: { row: virtualRow.index, column: 0 },
-                        to: {
-                          row: virtualRow.index,
-                          column: model.columns.length - 1,
-                        },
-                      })
+                    className={`vte-row-header ${
+                      selectedRange.minColumn === 0 &&
+                      selectedRange.maxColumn === model.columns.length - 1 &&
+                      virtualRow.index >= selectedRange.minRow &&
+                      virtualRow.index <= selectedRange.maxRow
+                        ? 'selected'
+                        : ''
+                    }`}
+                    onPointerDown={event =>
+                      beginSelection(
+                        'rows',
+                        { row: virtualRow.index, column: 0 },
+                        event
+                      )
+                    }
+                    onPointerEnter={event =>
+                      extendSelection(
+                        'rows',
+                        { row: virtualRow.index, column: 0 },
+                        event
+                      )
                     }
                   >
                     {virtualRow.index + 1}
@@ -1314,14 +1341,20 @@ export default function VisualTableEditor({
                           height: Math.max(40, cell.rowSpan * 42 - 2),
                           backgroundColor: cell.backgroundColor,
                         }}
-                        onPointerDown={event => {
-                          const point = { row: cell.row, column: cell.column }
-                          setSelection(current =>
-                            event.shiftKey
-                              ? { ...current, to: point }
-                              : { from: point, to: point }
+                        onPointerDown={event =>
+                          beginSelection(
+                            'cells',
+                            { row: cell.row, column: cell.column },
+                            event
                           )
-                        }}
+                        }
+                        onPointerEnter={event =>
+                          extendSelection(
+                            'cells',
+                            { row: cell.row, column: cell.column },
+                            event
+                          )
+                        }
                         onDoubleClick={() =>
                           setEditing({ row: cell.row, column: cell.column })
                         }
