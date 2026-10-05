@@ -97,6 +97,43 @@ A & B \\
     await screen.findByText('1 rows × 2 columns', { exact: false })
   })
 
+  it('renders imported row and column spans in the preview', async function () {
+    const { container } = render(
+      <VisualTableImportPanel onCancel={() => {}} onImport={() => {}} />
+    )
+    const source = String.raw`\begin{tabular}{|c|c|c|c|c|}
+\hline
+\multicolumn{5}{|c|}{\textbf{Masked heading}} \\
+\hline
+\multirow{2}{*}{A} & B & \multicolumn{2}{c|}{C-D} & E \\
+\cline{2-5}
+& F & G & H & I \\
+\hline
+\multirow{2}{*}{J-K} & \multicolumn{2}{c|}{L-M} & N & O \\
+\cline{2-5}
+& P & Q & \multicolumn{2}{c|}{R-S} \\
+\hline
+\end{tabular}`
+
+    fireEvent.change(screen.getByLabelText('Table text'), {
+      target: { value: source },
+    })
+    await screen.findByText('5 rows × 5 columns', { exact: false })
+
+    const cells = container.querySelectorAll('.vte-import-preview-table td')
+    expect(cells).to.have.length(16)
+    expect(
+      container.querySelectorAll('.vte-import-preview-table td[rowspan="2"]')
+    ).to.have.length(2)
+    expect(
+      container.querySelectorAll('.vte-import-preview-table td[colspan="2"]')
+    ).to.have.length(3)
+    expect(
+      container.querySelector('.vte-import-preview-table td[colspan="5"]')
+        ?.textContent
+    ).to.equal('Masked heading')
+  })
+
   it('keeps a manual format selection until the source is cleared', function () {
     render(<VisualTableImportPanel onCancel={() => {}} onImport={() => {}} />)
     const format = screen.getByLabelText('Format') as HTMLSelectElement

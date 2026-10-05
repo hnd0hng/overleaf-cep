@@ -197,9 +197,10 @@ C & D \\
     const parsed = parseLatexTable(String.raw`\begin{tabular}{c}
 \textcolor{red}{A} \\
 \end{tabular}`)
-    expect(cellAt(parsed.model, 0, 0)?.content.rawLatex).to.equal(
-      String.raw`\textcolor{red}{A}`
-    )
+    expect(cellAt(parsed.model, 0, 0)?.content).to.deep.include({
+      text: 'A',
+      style: { color: 'red' },
+    })
     expect(generateLatex(parsed.model).latex).to.contain(
       String.raw`\textcolor{red}{A}`
     )
@@ -263,5 +264,30 @@ C & D \\
       line: 2,
     })
     expect(proposals[2]).to.deep.include({ status: 'insert' })
+  })
+
+  it('combines adjacent clines without drawing through a row span', function () {
+    const partial = parseLatexTable(
+      [
+        '\\begin{tabular}{ccc}',
+        'A & B & C \\\\ \\cline{2-3}',
+        'D & E & F \\\\',
+        '\\end{tabular}',
+      ].join('\n')
+    )
+    expect(generateLatex(partial.model).latex).to.contain('\\cline{2-3}')
+
+    const merged = parseLatexTable(
+      [
+        '\\begin{tabular}{|c|c|c|}',
+        '\\hline',
+        '\\multicolumn{2}{|c|}{\\multirow{2}{*}{Block}} & A \\\\ \\cline{3-3}',
+        ' & & B \\\\ \\hline',
+        '\\end{tabular}',
+      ].join('\n')
+    )
+    const generated = generateLatex(merged.model).latex
+    expect(generated).to.contain('\\cline{3-3}')
+    expect(generated.match(/\\hline/g)).to.have.length(2)
   })
 })

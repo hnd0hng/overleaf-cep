@@ -115,13 +115,33 @@ const horizontalRules = (
     if (row === 1) return '\\midrule\n'
     return ''
   }
-  const bordered = cells.filter(cell => cell.borders.top !== 'none')
-  if (!bordered.length) return ''
-  if (bordered.length === cells.length) return '\\hline\n'
-  const intervals = bordered
+  const intervals = cells
+    .filter(cell => cell.borders.top !== 'none')
     .map(cell => [cell.column + 1, cell.column + cell.columnSpan] as const)
     .sort((a, b) => a[0] - b[0])
-  return `${intervals.map(([from, to]) => `\\cline{${from}-${to}}`).join(' ')}\n`
+  if (!intervals.length) return ''
+
+  const merged: Array<[number, number]> = []
+  for (const [from, to] of intervals) {
+    const previous = merged.at(-1)
+    if (previous && from <= previous[1] + 1) {
+      previous[1] = Math.max(previous[1], to)
+    } else {
+      merged.push([from, to])
+    }
+  }
+  if (
+    merged.length === 1 &&
+    merged[0][0] === 1 &&
+    merged[0][1] === model.columns.length
+  ) {
+    return '\\hline\n'
+  }
+  return (
+    merged
+      .map(([from, to]) => '\\cline{' + from + '-' + to + '}')
+      .join(' ') + '\n'
+  )
 }
 
 export type GenerationResult = {
@@ -288,6 +308,7 @@ const splitTopLevel = (source: string, delimiter: '&' | '\\\\') => {
   let depth = 0
   let math = false
   let comment = false
+  const environmentStack: string[] = []
   for (let index = 0; index < source.length; index++) {
     const character = source[index]
     if (comment) {
@@ -300,10 +321,19 @@ const splitTopLevel = (source: string, delimiter: '&' | '\\\\') => {
     }
     if (character === '$' && source[index - 1] !== '\\') math = !math
     if (!math) {
+      const environmentToken = source
+        .slice(index)
+        .match(/^\\(begin|end)\{([^{}]+)\}/)
+      if (environmentToken?.[1] === 'begin') {
+        environmentStack.push(environmentToken[2])
+      } else if (environmentToken?.[1] === 'end') {
+        const current = environmentStack.at(-1)
+        if (current === environmentToken[2]) environmentStack.pop()
+      }
       if (character === '{' && source[index - 1] !== '\\') depth++
       if (character === '}' && source[index - 1] !== '\\') depth--
     }
-    if (depth !== 0 || math) continue
+    if (depth !== 0 || math || environmentStack.length) continue
     if (delimiter === '&' && character === '&' && source[index - 1] !== '\\') {
       result.push(source.slice(start, index))
       start = index + 1
@@ -320,6 +350,63 @@ const splitTopLevel = (source: string, delimiter: '&' | '\\\\') => {
   }
   result.push(source.slice(start))
   return result
+}
+
+const normalizeLooseRowSeparators = (source: string) => {
+  let normalized = ''
+  let replacements = 0
+  let depth = 0
+  let math = false
+  let comment = false
+  const environmentStack: string[] = []
+
+  for (let index = 0; index < source.length; index++) {
+    const character = source[index]
+    if (comment) {
+      normalized += character
+      if (character === '\n') comment = false
+      continue
+    }
+    if (character === '%' && source[index - 1] !== '\\') {
+      comment = true
+      normalized += character
+      continue
+    }
+    if (character === '$' && source[index - 1] !== '\\') math = !math
+    if (!math) {
+      const environmentToken = source
+        .slice(index)
+        .match(/^\\(begin|end)\{([^{}]+)\}/)
+      if (environmentToken?.[1] === 'begin') {
+        environmentStack.push(environmentToken[2])
+      } else if (environmentToken?.[1] === 'end') {
+        const current = environmentStack.at(-1)
+        if (current === environmentToken[2]) environmentStack.pop()
+      }
+      if (character === '{' && source[index - 1] !== '\\') depth++
+      if (character === '}' && source[index - 1] !== '\\') depth--
+    }
+
+    if (
+      source[index - 1] !== '\\' &&
+      depth === 0 &&
+      !math &&
+      !environmentStack.length
+    ) {
+      const looseSeparator = source
+        .slice(index)
+        .match(/^\\[ \t\r\n]+(?=\\(?:hline\b|cline\{\d+-\d+\}))/)
+      if (looseSeparator) {
+        normalized += '\\\\ '
+        replacements++
+        index += looseSeparator[0].length - 1
+        continue
+      }
+    }
+    normalized += character
+  }
+
+  return { normalized, replacements }
 }
 
 const parseColumns = (specification: string) => {
@@ -388,10 +475,61 @@ const unwrapCommand = (value: string, command: string) => {
   return args
 }
 
+const unwrapLeadingCommand = (value: string, command: string) => {
+  const trimmed = value.trim()
+  const prefix = '\\' + command
+  if (!trimmed.startsWith(prefix)) return
+  const cursor = prefix.length
+  if (trimmed[cursor] !== '{') return
+  const argument = readBalanced(trimmed, cursor)
+  return {
+    argument: argument.value,
+    remainder: trimmed.slice(argument.end).trimStart(),
+  }
+}
+
+const unwrapShortstack = (value: string) => {
+  const trimmed = value.trim()
+  const prefix = '\\shortstack'
+  if (!trimmed.startsWith(prefix)) return
+  let cursor = prefix.length
+  if (trimmed[cursor] === '[') {
+    const closing = trimmed.indexOf(']', cursor + 1)
+    if (closing < 0) return
+    cursor = closing + 1
+  }
+  if (trimmed[cursor] !== '{') return
+  const argument = readBalanced(trimmed, cursor)
+  if (trimmed.slice(argument.end).trim()) return
+  return argument.value
+}
+
+const decodeLatexText = (value: string) => {
+  const supportedEscape =
+    /\\(?:[&%$#_{}]|textasciitilde\{\}|textasciicircum\{\}|textbackslash\{\})/g
+  const unsupported = value.replace(supportedEscape, '')
+  if (/\\[a-zA-Z]+|[{}$]/.test(unsupported)) return
+  return value
+    .replace(/\\textasciitilde\{\}/g, '~')
+    .replace(/\\textasciicircum\{\}/g, '^')
+    .replace(/\\textbackslash\{\}/g, '\\')
+    .replace(/\\([&%$#_{}])/g, '$1')
+}
+
+const readCommandArgument = (source: string, command: string) => {
+  const prefix = '\\' + command
+  const start = source.indexOf(prefix)
+  if (start < 0) return
+  let cursor = start + prefix.length
+  while (/\s/.test(source[cursor])) cursor++
+  if (source[cursor] !== '{') return
+  return readBalanced(source, cursor).value
+}
+
 const parseCell = (source: string, row: number, column: number): TableCell => {
   let value = source.trim()
   const cell: TableCell = {
-    id: `cell-${row}-${column}`,
+    id: 'cell-' + row + '-' + column,
     row,
     column,
     rowSpan: 1,
@@ -399,37 +537,74 @@ const parseCell = (source: string, row: number, column: number): TableCell => {
     content: { text: '' },
     borders: emptyBorders(),
   }
-  const multiColumn = unwrapCommand(value, 'multicolumn')
-  if (multiColumn?.length === 3) {
-    cell.columnSpan = Number(multiColumn[0])
-    const multiColumnSpec = multiColumn[1].trim()
-    if (multiColumnSpec.startsWith('|')) cell.borders.left = 'solid'
-    if (multiColumnSpec.endsWith('|')) cell.borders.right = 'solid'
-    const alignment = multiColumnSpec.match(/[lcr]/)?.[0]
-    if (alignment) {
-      cell.horizontalAlignment =
-        alignment === 'l' ? 'left' : alignment === 'r' ? 'right' : 'center'
+  let unwrapped = true
+  while (unwrapped) {
+    unwrapped = false
+    const multiColumn = unwrapCommand(value, 'multicolumn')
+    if (multiColumn?.length === 3) {
+      cell.columnSpan = Number(multiColumn[0])
+      const multiColumnSpec = multiColumn[1].trim()
+      if (multiColumnSpec.startsWith('|')) cell.borders.left = 'solid'
+      if (multiColumnSpec.endsWith('|')) cell.borders.right = 'solid'
+      const alignment = multiColumnSpec.match(/[lcr]/)?.[0]
+      if (alignment) {
+        cell.horizontalAlignment =
+          alignment === 'l' ? 'left' : alignment === 'r' ? 'right' : 'center'
+      }
+      value = multiColumn[2]
+      unwrapped = true
+      continue
     }
-    value = multiColumn[2]
+    const multiRow = unwrapCommand(value, 'multirow')
+    if (multiRow?.length === 3) {
+      cell.rowSpan = Number(multiRow[0])
+      value = multiRow[2]
+      unwrapped = true
+      continue
+    }
+    const cellColor = unwrapLeadingCommand(value, 'cellcolor')
+    if (cellColor) {
+      cell.backgroundColor = cellColor.argument
+      value = cellColor.remainder
+      unwrapped = true
+      continue
+    }
+    const textColor = unwrapCommand(value, 'textcolor')
+    if (textColor?.length === 2) {
+      cell.content.style = { ...cell.content.style, color: textColor[0] }
+      value = textColor[1]
+      unwrapped = true
+      continue
+    }
+    const bold = unwrapCommand(value, 'textbf')
+    if (bold?.length === 1) {
+      cell.content.style = { ...cell.content.style, bold: true }
+      value = bold[0]
+      unwrapped = true
+      continue
+    }
+    const italic = unwrapCommand(value, 'textit')
+    if (italic?.length === 1) {
+      cell.content.style = { ...cell.content.style, italic: true }
+      value = italic[0]
+      unwrapped = true
+      continue
+    }
+    const shortstack = unwrapShortstack(value)
+    if (shortstack !== undefined) {
+      const lines = splitTopLevel(shortstack, '\\\\').map(line =>
+        decodeLatexText(line.trim())
+      )
+      if (lines.every((line): line is string => line !== undefined)) {
+        value = lines.join('\n')
+        unwrapped = true
+      }
+    }
   }
-  const multiRow = unwrapCommand(value, 'multirow')
-  if (multiRow?.length === 3) {
-    cell.rowSpan = Number(multiRow[0])
-    value = multiRow[2]
-  }
-  const bold = unwrapCommand(value, 'textbf')
-  if (bold?.length === 1) {
-    cell.content.style = { bold: true }
-    value = bold[0]
-  }
-  const italic = unwrapCommand(value, 'textit')
-  if (italic?.length === 1) {
-    cell.content.style = { ...cell.content.style, italic: true }
-    value = italic[0]
-  }
-  // Imported content remains opaque unless it is plain text. This prevents double escaping.
-  if (/\\[a-zA-Z]+|[{}$]/.test(value)) cell.content.rawLatex = value
-  else cell.content.text = value.replace(/\\([&%$#_{}])/g, '$1')
+  value = value.replace(/\\newline\s*/g, '\n')
+  const decoded = decodeLatexText(value)
+  if (decoded === undefined) cell.content.rawLatex = value
+  else cell.content.text = decoded
   return cell
 }
 
@@ -513,24 +688,75 @@ export const parseLatexTable = (
   while (/\s/.test(source[cursor])) cursor++
   const specification = readBalanced(source, cursor)
   const { columns, verticalBoundaries } = parseColumns(specification.value)
-  const body = source.slice(specification.end, location.endStart)
+  let body = source.slice(specification.end, location.endStart)
+  let repeatHeaderRowCount = 0
+  let malformedLongtableHeaders = false
+  if (environment === 'longtable') {
+    const caption = unwrapLeadingCommand(body, 'caption')
+    if (caption) body = caption.remainder
+    const label = unwrapLeadingCommand(body, 'label')
+    if (label) body = label.remainder
+    if (body.trimStart().startsWith('\\\\')) {
+      body = body.trimStart().slice(2)
+    }
+
+    const firstHead = body.indexOf('\\endfirsthead')
+    const repeatedHead = body.indexOf('\\endhead')
+    if (firstHead >= 0 && repeatedHead > firstHead) {
+      const repeated = body.slice(
+        firstHead + '\\endfirsthead'.length,
+        repeatedHead
+      )
+      repeatHeaderRowCount = splitTopLevel(repeated, '\\\\').filter(chunk =>
+        chunk
+          .replace(
+            /\\(?:hline|cline\{\d+-\d+\}|toprule|midrule|bottomrule)\s*/g,
+            ''
+          )
+          .trim()
+      ).length
+      body = repeated + body.slice(repeatedHead + '\\endhead'.length)
+    } else if (firstHead >= 0 || repeatedHead >= 0) {
+      malformedLongtableHeaders = true
+    }
+  }
+  const looseRowSeparators = normalizeLooseRowSeparators(body)
+  body = looseRowSeparators.normalized
   const unsafeCommands = body.match(
-    /\\(cmidrule|specialrule|addlinespace|rowcolor|hhline|endfirsthead|endhead|endfoot|endlastfoot)\b/g
+    /\\(cmidrule|specialrule|addlinespace|rowcolor|hhline|endfoot|endlastfoot)\b/g
   )
   const wrapperSource =
     source.slice(0, location.beginStart) + source.slice(location.endEnd)
   const unsafeWrapperCommands = wrapperSource.match(/\\setlength\b/g)
-  let unsafe = Boolean(unsafeCommands || unsafeWrapperCommands)
+  let unsafe = Boolean(
+    unsafeCommands ||
+      unsafeWrapperCommands ||
+      malformedLongtableHeaders ||
+      looseRowSeparators.replacements
+  )
   if (unsafeCommands) {
     diagnostics.push({
       severity: 'warning',
       message: `The table contains unsupported structure: ${[...new Set(unsafeCommands)].join(', ')}`,
     })
   }
+  if (malformedLongtableHeaders) {
+    diagnostics.push({
+      severity: 'warning',
+      message:
+        'The longtable header must contain both \\endfirsthead and \\endhead.',
+    })
+  }
   if (unsafeWrapperCommands) {
     diagnostics.push({
       severity: 'warning',
       message: `The table wrapper contains unsupported structure: ${[...new Set(unsafeWrapperCommands)].join(', ')}`,
+    })
+  }
+  if (looseRowSeparators.replacements) {
+    diagnostics.push({
+      severity: 'warning',
+      message: `Found ${looseRowSeparators.replacements} single-backslash row separator${looseRowSeparators.replacements === 1 ? '' : 's'} before \\hline or \\cline. They will be interpreted as \\\\.`,
     })
   }
   if (unsafe && !allowUnsafe) {
@@ -570,10 +796,10 @@ export const parseLatexTable = (
   if (wrapper?.[1] !== undefined) {
     model.options.placement = wrapper[1]
   }
-  model.options.caption = source.match(/\\caption\{([^{}]*)\}/)?.[1] ?? ''
-  model.options.label = (
-    source.match(/\\label\{([^{}]*)\}/)?.[1] ?? ''
-  ).replace(/\\([&%$#_{}])/g, '$1')
+  const captionArgument = readCommandArgument(source, 'caption') ?? ''
+  model.options.caption = decodeLatexText(captionArgument) ?? captionArgument
+  const labelArgument = readCommandArgument(source, 'label') ?? ''
+  model.options.label = decodeLatexText(labelArgument) ?? labelArgument
   model.options.scale = /\\resizebox\{\\textwidth\}/.test(source)
     ? 'textwidth'
     : /\\resizebox\{\\columnwidth\}/.test(source)
@@ -632,6 +858,9 @@ export const parseLatexTable = (
     if (cell.columnSpan === 1) {
       if (verticalBoundaries.has(cell.column)) cell.borders.left = 'solid'
       if (verticalBoundaries.has(cell.column + 1)) cell.borders.right = 'solid'
+      if (cell.horizontalAlignment === model.columns[cell.column].alignment) {
+        cell.horizontalAlignment = undefined
+      }
     }
   }
   for (const [boundary, ranges] of rulesAtBoundary) {
@@ -647,6 +876,13 @@ export const parseLatexTable = (
         }
       }
     }
+  }
+  for (
+    let row = 0;
+    row < repeatHeaderRowCount && row < model.rows.length;
+    row++
+  ) {
+    model.rows[row].repeatOnNewPage = true
   }
   model.unsafeImport = unsafe
   model.diagnostics = diagnostics

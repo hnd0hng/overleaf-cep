@@ -232,11 +232,19 @@ function ModelPreview({ result }: { result: TableImportResult }) {
             <tr key={row}>
               {Array.from({ length: columnCount }, (_unused, column) => {
                 const cell = cellAt(result.model, row, column)
-                const value =
-                  cell?.row === row && cell.column === column
-                    ? cell.content.text || cell.content.rawLatex || ''
-                    : ''
-                return <td key={column}>{value}</td>
+                if (!cell || cell.row !== row || cell.column !== column) {
+                  return null
+                }
+                const value = cell.content.text || cell.content.rawLatex || ''
+                return (
+                  <td
+                    key={column}
+                    rowSpan={Math.min(cell.rowSpan, rowCount - row)}
+                    colSpan={Math.min(cell.columnSpan, columnCount - column)}
+                  >
+                    {value}
+                  </td>
+                )
               })}
             </tr>
           ))}

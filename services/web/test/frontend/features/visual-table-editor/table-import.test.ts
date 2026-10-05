@@ -152,6 +152,38 @@ A & B \\
       expect(accepted.model.options.label).to.equal('tab:synthetic_spacing')
     })
 
+    it('repairs single-backslash row separators before horizontal rules after approval', function () {
+      const source = String.raw`\begin{tabular}{ccc}
+\multirow{2}{*}{Group} & \multicolumn{2}{c}{Heading} \ \cline{2-3}
+& Left & Right \ \hline
+\end{tabular}`
+
+      const warning = parseLatexImport(source)
+      expect(warning.unsafe).to.equal(true)
+      expect(warning.diagnostics.map(item => item.message).join(' ')).to.contain(
+        'single-backslash row separators'
+      )
+
+      const accepted = parseLatexImport(source, true)
+      expect(accepted.rows).to.equal(2)
+      expect(accepted.columns).to.equal(3)
+      expect(cellAt(accepted.model, 0, 0)).to.deep.include({ rowSpan: 2 })
+      expect(cellAt(accepted.model, 0, 1)).to.deep.include({ columnSpan: 2 })
+      expect(cellAt(accepted.model, 1, 1)?.content.text).to.equal('Left')
+      expect(cellAt(accepted.model, 1, 2)?.content.text).to.equal('Right')
+    })
+
+    it('does not reinterpret a single-backslash space inside cell content', function () {
+      const result = parseLatexImport(String.raw`\begin{tabular}{c}
+Value\ (masked) \\
+\end{tabular}`)
+
+      expect(result.unsafe).to.equal(false)
+      expect(cellAt(result.model, 0, 0)?.content.text).to.equal(
+        String.raw`Value\ (masked)`
+      )
+    })
+
     it('rejects fragments, missing endings, and multiple tables', function () {
       expect(() => parseLatexImport(String.raw`A & B \\`)).to.throw(
         'exactly one supported'
