@@ -79,10 +79,11 @@ const renderCellContent = (
   if (cell.content.style?.bold) value = `\\textbf{${value}}`
   if (cell.content.style?.italic) value = `\\textit{${value}}`
   if (cell.content.style?.color) {
-    packages.add('xcolor')
+    if (!packages.has('xcolor[table]')) packages.add('xcolor')
     value = `\\textcolor{${cell.content.style.color}}{${value}}`
   }
   if (cell.backgroundColor) {
+    packages.delete('xcolor')
     packages.add('xcolor[table]')
     value = `\\cellcolor{${cell.backgroundColor}}${value}`
   }
@@ -104,13 +105,16 @@ const renderCellContent = (
   return value
 }
 
-const horizontalRules = (model: TableModel, row: number) => {
+const horizontalRules = (
+  model: TableModel,
+  row: number,
+  cells: TableCell[]
+) => {
   if (model.options.style === 'booktabs') {
     if (row === 0) return '\\toprule\n'
     if (row === 1) return '\\midrule\n'
     return ''
   }
-  const cells = getCells(model).filter(cell => cell.row === row)
   const bordered = cells.filter(cell => cell.borders.top !== 'none')
   if (!bordered.length) return ''
   if (bordered.length === cells.length) return '\\hline\n'
@@ -138,9 +142,17 @@ export const generateLatex = (model: TableModel): GenerationResult => {
   if (model.options.environment === 'tabularx') packages.add('tabularx')
   if (model.options.environment === 'longtable') packages.add('longtable')
 
+  const cells = getCells(model)
+  const cellsByRow = new Map<number, TableCell[]>()
+  for (const cell of cells) {
+    const rowCells = cellsByRow.get(cell.row) ?? []
+    rowCells.push(cell)
+    cellsByRow.set(cell.row, rowCells)
+  }
+
   const rowLines: string[] = []
   for (let row = 0; row < model.rows.length; row++) {
-    let latex = horizontalRules(model, row)
+    let latex = horizontalRules(model, row, cellsByRow.get(row) ?? [])
     const values: string[] = []
     for (let column = 0; column < model.columns.length; ) {
       const cell = cellAt(model, row, column)!
@@ -165,16 +177,15 @@ export const generateLatex = (model: TableModel): GenerationResult => {
   const trailingRules: string[] = []
   if (model.options.style === 'booktabs') trailingRules.push('\\bottomrule')
   else {
-    const bottom = getCells(model).filter(
+    const bottom = cells.filter(
       cell =>
         cell.row + cell.rowSpan === model.rows.length &&
         cell.borders.bottom !== 'none'
     )
     if (
       bottom.length ===
-        getCells(model).filter(
-          cell => cell.row + cell.rowSpan === model.rows.length
-        ).length &&
+        cells.filter(cell => cell.row + cell.rowSpan === model.rows.length)
+          .length &&
       bottom.length
     ) {
       trailingRules.push('\\hline')

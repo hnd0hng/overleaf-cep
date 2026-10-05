@@ -4,6 +4,7 @@ import { useState } from 'react'
 import {
   caretOffsetFromPoint,
   CellEditingKeyboardEvent,
+  isDirectGridKeyboardEvent,
   replacementTextForKey,
 } from '@/features/visual-table-editor/cell-editing'
 import VisualTableCellEditor from '@/features/visual-table-editor/components/visual-table-cell-editor'
@@ -42,6 +43,17 @@ describe('visual table cell editing', function () {
       expect(replacementTextForKey(keyboardEvent({ key: 'Enter' }))).to.equal(
         null
       )
+    })
+  })
+
+  describe('isDirectGridKeyboardEvent', function () {
+    it('accepts grid events and rejects events bubbling from controls', function () {
+      const grid = document.createElement('div')
+      const input = document.createElement('input')
+      grid.appendChild(input)
+
+      expect(isDirectGridKeyboardEvent(grid, grid)).to.equal(true)
+      expect(isDirectGridKeyboardEvent(input, grid)).to.equal(false)
     })
   })
 

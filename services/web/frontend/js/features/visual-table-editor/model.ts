@@ -132,6 +132,9 @@ export const mergeSelection = (model: TableModel, selection: CellSelection) => {
       cell.column + cell.columnSpan - 1 <= range.maxColumn
   )
   if (!exactlyCovered) throw new Error('Selection cuts through a merged cell')
+  const anchor = cells.find(
+    cell => cell.row === range.minRow && cell.column === range.minColumn
+  )
   const content = cells
     .sort((a, b) => a.row - b.row || a.column - b.column)
     .map(cell => cell.content.text || cell.content.rawLatex || '')
@@ -141,7 +144,44 @@ export const mergeSelection = (model: TableModel, selection: CellSelection) => {
   const merged = createCell(range.minRow, range.minColumn)
   merged.rowSpan = range.maxRow - range.minRow + 1
   merged.columnSpan = range.maxColumn - range.minColumn + 1
-  merged.content.text = content
+  merged.content = {
+    text: content,
+    style: anchor?.content.style
+      ? structuredClone(anchor.content.style)
+      : undefined,
+  }
+  merged.backgroundColor = anchor?.backgroundColor
+  merged.horizontalAlignment = anchor?.horizontalAlignment
+  merged.verticalAlignment = anchor?.verticalAlignment
+  merged.numberFormat = anchor?.numberFormat
+    ? structuredClone(anchor.numberFormat)
+    : undefined
+  merged.borders = {
+    top: cells.some(
+      cell => cell.row === range.minRow && cell.borders.top !== 'none'
+    )
+      ? 'solid'
+      : 'none',
+    right: cells.some(
+      cell =>
+        cell.column + cell.columnSpan - 1 === range.maxColumn &&
+        cell.borders.right !== 'none'
+    )
+      ? 'solid'
+      : 'none',
+    bottom: cells.some(
+      cell =>
+        cell.row + cell.rowSpan - 1 === range.maxRow &&
+        cell.borders.bottom !== 'none'
+    )
+      ? 'solid'
+      : 'none',
+    left: cells.some(
+      cell => cell.column === range.minColumn && cell.borders.left !== 'none'
+    )
+      ? 'solid'
+      : 'none',
+  }
   next.cells[merged.id] = merged
   assertModel(next)
   return next
@@ -159,8 +199,27 @@ export const splitSelection = (model: TableModel, selection: CellSelection) => {
         column++
       ) {
         const replacement = createCell(row, column)
+        replacement.backgroundColor = cell.backgroundColor
+        replacement.horizontalAlignment = cell.horizontalAlignment
+        replacement.verticalAlignment = cell.verticalAlignment
         if (row === cell.row && column === cell.column) {
-          replacement.content = cell.content
+          replacement.content = structuredClone(cell.content)
+          replacement.numberFormat = cell.numberFormat
+            ? structuredClone(cell.numberFormat)
+            : undefined
+        }
+        replacement.borders = {
+          top: row === cell.row ? cell.borders.top : emptyBorders().top,
+          right:
+            column === cell.column + cell.columnSpan - 1
+              ? cell.borders.right
+              : emptyBorders().right,
+          bottom:
+            row === cell.row + cell.rowSpan - 1
+              ? cell.borders.bottom
+              : emptyBorders().bottom,
+          left:
+            column === cell.column ? cell.borders.left : emptyBorders().left,
         }
         next.cells[replacement.id] = replacement
       }

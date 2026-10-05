@@ -6,6 +6,11 @@ export type CellEditingKeyboardEvent = {
   metaKey: boolean
 }
 
+export const isDirectGridKeyboardEvent = (
+  target: EventTarget | null,
+  currentTarget: EventTarget | null
+) => target === currentTarget
+
 type CaretDocument = Document & {
   caretPositionFromPoint?: (
     x: number,

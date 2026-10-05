@@ -37,6 +37,57 @@ describe('Visual Table Editor core', function () {
     expect(() => assertModel(split)).not.to.throw()
   })
 
+  it('preserves anchor formatting and outer borders through merge and split', function () {
+    const model = createTableModel(2, 2)
+    const anchor = cellAt(model, 0, 0)!
+    anchor.content.text = 'Masked'
+    anchor.content.style = { bold: true, color: '#123456' }
+    anchor.backgroundColor = '#abcdef'
+    anchor.horizontalAlignment = 'right'
+    anchor.verticalAlignment = 'middle'
+    anchor.numberFormat = {
+      precision: 2,
+      thousandsSeparator: true,
+      decimalSeparator: '.',
+    }
+
+    const selection = {
+      from: { row: 0, column: 0 },
+      to: { row: 1, column: 1 },
+    }
+    const merged = mergeSelection(model, selection)
+    const mergedCell = cellAt(merged, 0, 0)!
+    expect(mergedCell.content.style).to.deep.equal(anchor.content.style)
+    expect(mergedCell.backgroundColor).to.equal('#abcdef')
+    expect(mergedCell.horizontalAlignment).to.equal('right')
+    expect(mergedCell.verticalAlignment).to.equal('middle')
+    expect(mergedCell.numberFormat).to.deep.equal(anchor.numberFormat)
+    expect(mergedCell.borders).to.deep.equal({
+      top: 'solid',
+      right: 'solid',
+      bottom: 'solid',
+      left: 'solid',
+    })
+
+    const split = splitSelection(merged, selection)
+    expect(cellAt(split, 0, 0)?.content.style).to.deep.equal(
+      anchor.content.style
+    )
+    expect(
+      Object.values(split.cells).every(
+        cell => cell.backgroundColor === '#abcdef'
+      )
+    ).to.equal(true)
+    expect(cellAt(split, 0, 0)?.borders).to.deep.include({
+      top: 'solid',
+      left: 'solid',
+    })
+    expect(cellAt(split, 1, 1)?.borders).to.deep.include({
+      right: 'solid',
+      bottom: 'solid',
+    })
+  })
+
   it('preserves occupancy through structural operations and transpose', function () {
     let model = createTableModel(3, 3)
     model = insertRow(model, 1)
@@ -61,7 +112,9 @@ describe('Visual Table Editor core', function () {
     )
     expect(model.rows).to.have.length(1000)
     expect(model.columns).to.have.length(100)
-    expect(cellAt(model, 999, 99)?.content.text).to.equal('999:99')
+    const generated = generateLatex(model)
+    expect(generated.latex).to.contain('999:99')
+    expect(generated.latex.split('\n')).to.have.length.greaterThan(1000)
   })
 
   it('escapes literal TeX and generates deterministic merged output', function () {
@@ -81,6 +134,21 @@ describe('Visual Table Editor core', function () {
     expect(first.latex).to.contain('\\multicolumn{2}{c}')
     expect(first.packages).to.include('booktabs')
     expect(first.latex).not.to.contain('{|c|}')
+  })
+
+  it('uses only the strongest xcolor package requirement', function () {
+    const model = createTableModel(1, 2)
+    const cells = Object.values(model.cells)
+    cells[0].content.style = { color: '#123456' }
+    cells[1].backgroundColor = '#abcdef'
+
+    const generated = generateLatex(model)
+
+    expect(generated.packages).to.include('xcolor[table]')
+    expect(generated.packages).not.to.include('xcolor')
+    expect(
+      generated.packages.filter(item => item.startsWith('xcolor'))
+    ).to.have.length(1)
   })
 
   it('parses tabularx, multicolumn, multirow, caption and labels', function () {

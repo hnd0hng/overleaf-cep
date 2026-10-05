@@ -24,12 +24,14 @@ import OLFormCheckbox from '@/shared/components/ol/ol-form-checkbox'
 import OLFormControl from '@/shared/components/ol/ol-form-control'
 import OLFormSelect from '@/shared/components/ol/ol-form-select'
 import { useFeatureFlag } from '@/shared/context/split-test-context'
+import { copyText } from './clipboard'
 import {
   detectDelimiter,
   parseDelimited,
   parseHtmlTable,
   parseSpreadsheetClipboard,
 } from './csv'
+import { nextMatchIndex } from './find-replace'
 import { generateLatex } from './latex'
 import { TableHistory } from './history'
 import {
@@ -74,7 +76,11 @@ import VisualTablePasteSpecialDialog, {
 import VisualTableDragHandle from './components/visual-table-drag-handle'
 import VisualTableReorderNotice from './components/visual-table-reorder-notice'
 import VisualTableCellEditor from './components/visual-table-cell-editor'
-import { caretOffsetFromPoint, replacementTextForKey } from './cell-editing'
+import {
+  caretOffsetFromPoint,
+  isDirectGridKeyboardEvent,
+  replacementTextForKey,
+} from './cell-editing'
 import useTableReorder, {
   reorderedRangeStart,
   selectedReorderRange,
@@ -227,6 +233,7 @@ export default function VisualTableEditor({
   )
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!isDirectGridKeyboardEvent(event.target, event.currentTarget)) return
     if (editing) return
     const command = event.metaKey || event.ctrlKey
     if (command && event.key.toLowerCase() === 'z') {
@@ -405,6 +412,13 @@ export default function VisualTableEditor({
     }))
 
   const selectedRange = normalizeSelection(selection)
+  const selectedCellIds = useMemo(
+    () =>
+      new Set(
+        selectedCells(model, selection).map(selectedCell => selectedCell.id)
+      ),
+    [model, selection]
+  )
   const columnTemplate = `44px repeat(${model.columns.length}, minmax(110px, 1fr))`
 
   const getReorderRange = useCallback(
@@ -592,7 +606,7 @@ export default function VisualTableEditor({
 
   const navigateMatch = (direction: 1 | -1) => {
     if (!matches.length) return
-    const nextIndex = (matchIndex + direction + matches.length) % matches.length
+    const nextIndex = nextMatchIndex(matchIndex, matches.length, direction)
     const match = matches[nextIndex]
     setMatchIndex(nextIndex)
     setSelection({
@@ -1030,7 +1044,7 @@ export default function VisualTableEditor({
             <VisualTableToolbarButton
               tooltipId="vte-toggle-latex-preview"
               icon={sourceVisible ? 'visibility_off' : 'visibility'}
-              label={` LaTeX preview`}
+              label="LaTeX preview"
               active={sourceVisible}
               onClick={() => setSourceVisible(value => !value)}
             />
@@ -1155,7 +1169,10 @@ export default function VisualTableEditor({
                 <OLFormControl
                   size="sm"
                   value={find}
-                  onChange={event => setFind(event.target.value)}
+                  onChange={event => {
+                    setFind(event.target.value)
+                    setMatchIndex(-1)
+                  }}
                 />
               </label>
               <label>
@@ -1195,6 +1212,7 @@ export default function VisualTableEditor({
                   apply(current =>
                     replaceText(current, find, replace, target, false)
                   )
+                  setMatchIndex(-1)
                 }}
               />
               <VisualTableToolbarButton
@@ -1504,9 +1522,7 @@ export default function VisualTableEditor({
                     const cell = cellAt(model, virtualRow.index, column)!
                     if (cell.row !== virtualRow.index || cell.column !== column)
                       return null
-                    const selected = selectedCells(model, selection).some(
-                      item => item.id === cell.id
-                    )
+                    const selected = selectedCellIds.has(cell.id)
                     const isEditing =
                       editing?.point.row === cell.row &&
                       editing.point.column === cell.column
@@ -1625,7 +1641,15 @@ export default function VisualTableEditor({
                   tooltipId="vte-copy-latex"
                   icon="content_copy"
                   label="Copy LaTeX"
-                  onClick={() => navigator.clipboard.writeText(generated.latex)}
+                  onClick={() => {
+                    void copyText(generated.latex).then(copied => {
+                      if (!copied) {
+                        setError(
+                          'LaTeX could not be copied. Select the preview and copy it manually.'
+                        )
+                      }
+                    })
+                  }}
                 />
               </div>
               <pre>{generated.latex}</pre>
