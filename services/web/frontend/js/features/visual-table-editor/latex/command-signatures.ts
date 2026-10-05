@@ -1,0 +1,62 @@
+export type ArgumentKind = 'mandatory' | 'optional'
+
+const signatures: Record<string, ArgumentKind[]> = {
+  multicolumn: ['mandatory', 'mandatory', 'mandatory'],
+  multirow: [
+    'optional',
+    'mandatory',
+    'optional',
+    'mandatory',
+    'optional',
+    'mandatory',
+  ],
+  makecell: ['optional', 'mandatory'],
+  shortstack: ['optional', 'mandatory'],
+  textbf: ['mandatory'],
+  textit: ['mandatory'],
+  emph: ['mandatory'],
+  textsl: ['mandatory'],
+  underline: ['mandatory'],
+  uline: ['mandatory'],
+  textnormal: ['mandatory'],
+  textrm: ['mandatory'],
+  textup: ['mandatory'],
+  mbox: ['mandatory'],
+  color: ['optional', 'mandatory'],
+  textcolor: ['optional', 'mandatory', 'mandatory'],
+  cellcolor: ['optional', 'mandatory'],
+  rowcolor: ['optional', 'mandatory'],
+  columncolor: ['optional', 'mandatory'],
+  hline: [],
+  toprule: ['optional'],
+  midrule: ['optional'],
+  bottomrule: ['optional'],
+  cline: ['mandatory'],
+  cmidrule: ['optional', 'mandatory'],
+  hhline: ['mandatory'],
+  cdashline: ['mandatory'],
+  specialrule: ['mandatory', 'mandatory', 'mandatory'],
+  addlinespace: ['optional'],
+  noalign: ['mandatory'],
+  caption: ['optional', 'mandatory'],
+  label: ['mandatory'],
+  resizebox: ['mandatory', 'mandatory', 'mandatory'],
+}
+
+const environmentSignatures: Record<string, ArgumentKind[]> = {
+  table: ['optional'],
+  'table*': ['optional'],
+  tabular: ['optional', 'mandatory'],
+  'tabular*': ['mandatory', 'optional', 'mandatory'],
+  tabularx: ['mandatory', 'mandatory'],
+  tabulary: ['mandatory', 'mandatory'],
+  xltabular: ['mandatory', 'mandatory'],
+  longtable: ['optional', 'mandatory'],
+  array: ['optional', 'mandatory'],
+  NiceTabular: ['optional', 'mandatory', 'optional'],
+}
+
+export const commandSignature = (name: string) => signatures[name] ?? []
+
+export const environmentSignature = (name: string) =>
+  environmentSignatures[name] ?? []

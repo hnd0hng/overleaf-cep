@@ -207,12 +207,13 @@ C & D \\
   })
 
   it('round-trips supported horizontal and vertical borders', function () {
-    const parsed = parseLatexTable(String.raw`\begin{tabular}{|c|c|}
+    const source = String.raw`\begin{tabular}{|c|c|}
 \hline
 A & B \\ \cline{1-1}
 C & D \\
 \hline
-\end{tabular}`)
+\end{tabular}`
+    const parsed = parseLatexTable(source)
     expect(parsed.unsafe).to.equal(false)
     expect(cellAt(parsed.model, 0, 0)?.borders).to.deep.include({
       top: 'solid',
@@ -223,10 +224,16 @@ C & D \\
       top: 'solid',
       bottom: 'solid',
     })
-    const generated = generateLatex(parsed.model).latex
+    expect(generateLatex(parsed.model).latex).to.equal(source)
+    const edited = updateCellText(
+      parsed.model,
+      { row: 0, column: 0 },
+      'Changed'
+    )
+    const generated = generateLatex(edited).latex
     expect(generated).to.contain('\\hline')
     expect(generated).to.contain('\\cline{1-1}')
-    expect(generated).to.contain('\\multicolumn{1}{|c|}{A}')
+    expect(generated).to.contain('\\multicolumn{1}{|c|}{Changed}')
   })
 
   it('does not duplicate repeated longtable header rows in the body', function () {

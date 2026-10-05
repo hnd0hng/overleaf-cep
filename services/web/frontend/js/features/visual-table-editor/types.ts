@@ -80,6 +80,12 @@ export type TableModel = {
   cells: Record<string, TableCell>
   options: TableOptions
   unsafeImport?: boolean
+  /** Original LaTeX is retained only while the imported model is unchanged. */
+  latexOrigin?: {
+    source: string
+    wrapper: 'standalone' | 'table'
+    modelFingerprint: string
+  }
   diagnostics: Diagnostic[]
 }
 

@@ -10,6 +10,17 @@ import {
   TableModel,
 } from './types'
 import { assertModel, cellAt, getCells } from './model'
+import { parseColumnSpecification } from './latex/column-spec'
+import { analyzeBoundaryRules } from './latex/generator/boundary-analyzer'
+import { collectSourcePackages } from './latex/generator/package-analyzer'
+import { buildLatexGrid } from './latex/grid-builder'
+import { parseLatexFragment, parseLatexSyntax } from './latex/parser'
+import type { LatexNode } from './latex/syntax-tree'
+import { extractRowStructure } from './latex/row-extractor'
+import {
+  attachLatexOrigin,
+  unchangedLatexSource,
+} from './latex/source-preservation'
 
 const SPECIAL_CHARACTERS: Record<string, string> = {
   '&': '\\&',
@@ -105,45 +116,6 @@ const renderCellContent = (
   return value
 }
 
-const horizontalRules = (
-  model: TableModel,
-  row: number,
-  cells: TableCell[]
-) => {
-  if (model.options.style === 'booktabs') {
-    if (row === 0) return '\\toprule\n'
-    if (row === 1) return '\\midrule\n'
-    return ''
-  }
-  const intervals = cells
-    .filter(cell => cell.borders.top !== 'none')
-    .map(cell => [cell.column + 1, cell.column + cell.columnSpan] as const)
-    .sort((a, b) => a[0] - b[0])
-  if (!intervals.length) return ''
-
-  const merged: Array<[number, number]> = []
-  for (const [from, to] of intervals) {
-    const previous = merged.at(-1)
-    if (previous && from <= previous[1] + 1) {
-      previous[1] = Math.max(previous[1], to)
-    } else {
-      merged.push([from, to])
-    }
-  }
-  if (
-    merged.length === 1 &&
-    merged[0][0] === 1 &&
-    merged[0][1] === model.columns.length
-  ) {
-    return '\\hline\n'
-  }
-  return (
-    merged
-      .map(([from, to]) => '\\cline{' + from + '-' + to + '}')
-      .join(' ') + '\n'
-  )
-}
-
 export type GenerationResult = {
   latex: string
   packages: string[]
@@ -152,8 +124,11 @@ export type GenerationResult = {
 
 export const generateLatex = (model: TableModel): GenerationResult => {
   assertModel(model)
+  const preservedSource = unchangedLatexSource(model)
   const packages = new Set<string>()
+  collectSourcePackages(preservedSource, packages)
   const warnings: Diagnostic[] = []
+  const renderBoundaryRule = analyzeBoundaryRules(model)
   const columnSpec = model.columns.map(generateColumn).join('')
   if (model.columns.some(column => column.width.mode === 'fixed')) {
     packages.add('array')
@@ -162,17 +137,10 @@ export const generateLatex = (model: TableModel): GenerationResult => {
   if (model.options.environment === 'tabularx') packages.add('tabularx')
   if (model.options.environment === 'longtable') packages.add('longtable')
 
-  const cells = getCells(model)
-  const cellsByRow = new Map<number, TableCell[]>()
-  for (const cell of cells) {
-    const rowCells = cellsByRow.get(cell.row) ?? []
-    rowCells.push(cell)
-    cellsByRow.set(cell.row, rowCells)
-  }
-
   const rowLines: string[] = []
   for (let row = 0; row < model.rows.length; row++) {
-    let latex = horizontalRules(model, row, cellsByRow.get(row) ?? [])
+    const boundaryRule = renderBoundaryRule(row)
+    let latex = boundaryRule ? `${boundaryRule}\n` : ''
     const values: string[] = []
     for (let column = 0; column < model.columns.length; ) {
       const cell = cellAt(model, row, column)!
@@ -194,23 +162,8 @@ export const generateLatex = (model: TableModel): GenerationResult => {
     latex += `  ${values.join(' & ')} \\\\`
     rowLines.push(latex)
   }
-  const trailingRules: string[] = []
-  if (model.options.style === 'booktabs') trailingRules.push('\\bottomrule')
-  else {
-    const bottom = cells.filter(
-      cell =>
-        cell.row + cell.rowSpan === model.rows.length &&
-        cell.borders.bottom !== 'none'
-    )
-    if (
-      bottom.length ===
-        cells.filter(cell => cell.row + cell.rowSpan === model.rows.length)
-          .length &&
-      bottom.length
-    ) {
-      trailingRules.push('\\hline')
-    }
-  }
+  const trailingRule = renderBoundaryRule(model.rows.length)
+  const trailingRules = trailingRule ? [trailingRule] : []
 
   const environment = model.options.environment
   const begin =
@@ -252,7 +205,11 @@ export const generateLatex = (model: TableModel): GenerationResult => {
           'Longtable cannot be safely wrapped in resizebox; scaling was ignored.',
       })
     }
-    return { latex: body.join('\n'), packages: [...packages], warnings }
+    return {
+      latex: preservedSource ?? body.join('\n'),
+      packages: [...packages],
+      warnings,
+    }
   }
 
   let inner = `${begin}\n${[...rowLines, ...trailingRules].join('\n')}\n\\end{${environment}}`
@@ -261,6 +218,14 @@ export const generateLatex = (model: TableModel): GenerationResult => {
     const width =
       model.options.scale === 'textwidth' ? '\\textwidth' : '\\columnwidth'
     inner = `\\resizebox{${width}}{!}{%\n${inner}\n}`
+  }
+
+  if (model.latexOrigin?.wrapper === 'standalone') {
+    return {
+      latex: preservedSource ?? inner,
+      packages: [...packages],
+      warnings,
+    }
   }
 
   const wrapper = [
@@ -273,7 +238,11 @@ export const generateLatex = (model: TableModel): GenerationResult => {
   if (model.options.label)
     wrapper.push(`  \\label{${escapeLatex(model.options.label)}}`)
   wrapper.push('\\end{table}')
-  return { latex: wrapper.join('\n'), packages: [...packages], warnings }
+  return {
+    latex: preservedSource ?? wrapper.join('\n'),
+    packages: [...packages],
+    warnings,
+  }
 }
 
 const readBalanced = (
@@ -303,50 +272,14 @@ const readBalanced = (
 }
 
 const splitTopLevel = (source: string, delimiter: '&' | '\\\\') => {
+  const nodes = parseLatexFragment(source)
+  const separator = delimiter === '&' ? 'cell' : 'row'
   const result: string[] = []
   let start = 0
-  let depth = 0
-  let math = false
-  let comment = false
-  const environmentStack: string[] = []
-  for (let index = 0; index < source.length; index++) {
-    const character = source[index]
-    if (comment) {
-      if (character === '\n') comment = false
-      continue
-    }
-    if (character === '%' && source[index - 1] !== '\\') {
-      comment = true
-      continue
-    }
-    if (character === '$' && source[index - 1] !== '\\') math = !math
-    if (!math) {
-      const environmentToken = source
-        .slice(index)
-        .match(/^\\(begin|end)\{([^{}]+)\}/)
-      if (environmentToken?.[1] === 'begin') {
-        environmentStack.push(environmentToken[2])
-      } else if (environmentToken?.[1] === 'end') {
-        const current = environmentStack.at(-1)
-        if (current === environmentToken[2]) environmentStack.pop()
-      }
-      if (character === '{' && source[index - 1] !== '\\') depth++
-      if (character === '}' && source[index - 1] !== '\\') depth--
-    }
-    if (depth !== 0 || math || environmentStack.length) continue
-    if (delimiter === '&' && character === '&' && source[index - 1] !== '\\') {
-      result.push(source.slice(start, index))
-      start = index + 1
-    }
-    if (
-      delimiter === '\\\\' &&
-      character === '\\' &&
-      source[index + 1] === '\\'
-    ) {
-      result.push(source.slice(start, index))
-      start = index + 2
-      index++
-    }
+  for (const node of nodes) {
+    if (node.kind !== 'separator' || node.separator !== separator) continue
+    result.push(source.slice(start, node.from))
+    start = node.to
   }
   result.push(source.slice(start))
   return result
@@ -488,10 +421,50 @@ const unwrapLeadingCommand = (value: string, command: string) => {
   }
 }
 
-const unwrapShortstack = (value: string) => {
+const unwrapMultirow = (value: string) => {
   const trimmed = value.trim()
-  const prefix = '\\shortstack'
+  const prefix = '\\multirow'
   if (!trimmed.startsWith(prefix)) return
+  let cursor = prefix.length
+  const skipSpace = () => {
+    while (/\s/.test(trimmed[cursor] ?? '')) cursor++
+  }
+  const read = (optional: boolean) => {
+    skipSpace()
+    const opening = optional ? '[' : '{'
+    if (trimmed[cursor] !== opening) return
+    const argument = readBalanced(
+      trimmed,
+      cursor,
+      opening,
+      optional ? ']' : '}'
+    )
+    cursor = argument.end
+    return argument.value
+  }
+  read(true)
+  const rows = read(false)
+  read(true)
+  const width = read(false)
+  read(true)
+  const content = read(false)
+  skipSpace()
+  if (rows === undefined || width === undefined || content === undefined) return
+  if (cursor !== trimmed.length) return
+  const rowSpan = Number(rows.trim())
+  if (!Number.isInteger(rowSpan) || rowSpan === 0) return
+  return { rowSpan, content }
+}
+
+const unwrapMultiline = (value: string) => {
+  const trimmed = value.trim()
+  const command = trimmed.startsWith('\\shortstack')
+    ? 'shortstack'
+    : trimmed.startsWith('\\makecell')
+      ? 'makecell'
+      : undefined
+  if (!command) return
+  const prefix = `\\${command}`
   let cursor = prefix.length
   if (trimmed[cursor] === '[') {
     const closing = trimmed.indexOf(']', cursor + 1)
@@ -526,8 +499,11 @@ const readCommandArgument = (source: string, command: string) => {
   return readBalanced(source, cursor).value
 }
 
+const stripLatexComments = (source: string) =>
+  source.replace(/(^|[^\\])%[^\n]*(?:\n|$)/g, '$1')
+
 const parseCell = (source: string, row: number, column: number): TableCell => {
-  let value = source.trim()
+  let value = stripLatexComments(source).trim()
   const cell: TableCell = {
     id: 'cell-' + row + '-' + column,
     row,
@@ -555,10 +531,10 @@ const parseCell = (source: string, row: number, column: number): TableCell => {
       unwrapped = true
       continue
     }
-    const multiRow = unwrapCommand(value, 'multirow')
-    if (multiRow?.length === 3) {
-      cell.rowSpan = Number(multiRow[0])
-      value = multiRow[2]
+    const multiRow = unwrapMultirow(value)
+    if (multiRow) {
+      cell.rowSpan = multiRow.rowSpan
+      value = multiRow.content
       unwrapped = true
       continue
     }
@@ -590,7 +566,7 @@ const parseCell = (source: string, row: number, column: number): TableCell => {
       unwrapped = true
       continue
     }
-    const shortstack = unwrapShortstack(value)
+    const shortstack = unwrapMultiline(value)
     if (shortstack !== undefined) {
       const lines = splitTopLevel(shortstack, '\\\\').map(line =>
         decodeLatexText(line.trim())
@@ -625,45 +601,36 @@ export type TableEnvironmentLocation = {
 export const locateTableEnvironment = (
   source: string
 ): TableEnvironmentLocation => {
-  const tokens = source.matchAll(
-    /\\(begin|end)\{(tabularx|tabular|longtable)\}/g
-  )
-  const stack: Array<{
-    environment: TableEnvironment
-    beginStart: number
-    beginEnd: number
-  }> = []
+  const supported = new Set(['tabular', 'tabularx', 'longtable'])
   const roots: TableEnvironmentLocation[] = []
-
-  for (const token of tokens) {
-    const kind = token[1]
-    const environment = token[2] as TableEnvironment
-    const start = token.index ?? 0
-    if (kind === 'begin') {
-      stack.push({
-        environment,
-        beginStart: start,
-        beginEnd: start + token[0].length,
-      })
-      continue
-    }
-
-    const opening = stack.pop()
-    if (!opening || opening.environment !== environment) {
-      throw new Error('The supported LaTeX table environment is not balanced.')
-    }
-    if (!stack.length) {
-      roots.push({
-        ...opening,
-        endStart: start,
-        endEnd: start + token[0].length,
-      })
+  const visit = (nodes: LatexNode[], insideSupported = false) => {
+    for (const node of nodes) {
+      const isSupported =
+        node.kind === 'environment' && supported.has(node.name)
+      if (node.kind === 'environment' && isSupported) {
+        if (!insideSupported) {
+          const beginEnd = source.indexOf('}', node.from) + 1
+          roots.push({
+            environment: node.name as TableEnvironment,
+            beginStart: node.from,
+            beginEnd,
+            endStart: node.endStart,
+            endEnd: node.to,
+          })
+        }
+        continue
+      }
+      if (node.kind === 'group' || node.kind === 'environment') {
+        visit(node.children, insideSupported || isSupported)
+      }
+      if (node.kind === 'command' || node.kind === 'environment') {
+        for (const argument of node.arguments) {
+          visit(argument.children, insideSupported || isSupported)
+        }
+      }
     }
   }
-
-  if (stack.length) {
-    throw new Error(`Missing \\end{${stack[0].environment}}`)
-  }
+  visit(parseLatexSyntax(source).children)
   if (roots.length !== 1) {
     throw new Error('Enter exactly one supported LaTeX table environment.')
   }
@@ -687,7 +654,9 @@ export const parseLatexTable = (
   }
   while (/\s/.test(source[cursor])) cursor++
   const specification = readBalanced(source, cursor)
-  const { columns, verticalBoundaries } = parseColumns(specification.value)
+  const columnResult = parseColumnSpecification(specification.value)
+  const { columns, verticalBoundaries } = columnResult
+  diagnostics.push(...columnResult.diagnostics)
   let body = source.slice(specification.end, location.endStart)
   let repeatHeaderRowCount = 0
   let malformedLongtableHeaders = false
@@ -730,9 +699,10 @@ export const parseLatexTable = (
   const unsafeWrapperCommands = wrapperSource.match(/\\setlength\b/g)
   let unsafe = Boolean(
     unsafeCommands ||
-      unsafeWrapperCommands ||
-      malformedLongtableHeaders ||
-      looseRowSeparators.replacements
+    unsafeWrapperCommands ||
+    malformedLongtableHeaders ||
+    looseRowSeparators.replacements ||
+    columnResult.unsafe
   )
   if (unsafeCommands) {
     diagnostics.push({
@@ -766,15 +736,7 @@ export const parseLatexTable = (
   const rulesAtBoundary = new Map<number, Array<readonly [number, number]>>()
   for (const chunk of splitTopLevel(body, '\\\\')) {
     const boundary = rawRows.length
-    const rules: Array<readonly [number, number]> = []
-    const content = chunk.replace(
-      /\\(?:hline|cline\{(\d+)-(\d+)\}|toprule|midrule|bottomrule)\s*/g,
-      (_match, from?: string, to?: string) => {
-        if (from && to) rules.push([Number(from) - 1, Number(to) - 1])
-        else if (/\\hline/.test(_match)) rules.push([0, columns.length - 1])
-        return ''
-      }
-    )
+    const { content, rules } = extractRowStructure(chunk, columns.length)
     if (rules.length) {
       rulesAtBoundary.set(boundary, [
         ...(rulesAtBoundary.get(boundary) ?? []),
@@ -805,54 +767,17 @@ export const parseLatexTable = (
     : /\\resizebox\{\\columnwidth\}/.test(source)
       ? 'columnwidth'
       : 'none'
-  const occupied = new Set<string>()
-  rawRows.forEach((rowSource, row) => {
-    let column = 0
-    for (const value of splitTopLevel(rowSource, '&')) {
-      let consumedMergedPlaceholder = false
-      while (occupied.has(`${row}:${column}`)) {
-        column++
-        if (!value.trim()) {
-          consumedMergedPlaceholder = true
-          break
-        }
-      }
-      if (consumedMergedPlaceholder) continue
-      if (column >= columns.length) {
-        unsafe = true
-        diagnostics.push({
-          severity: 'warning',
-          message: `Row ${row + 1} has too many cells.`,
-        })
-        break
-      }
-      const cell = parseCell(value, row, column)
-      if (
-        cell.row + cell.rowSpan > rawRows.length ||
-        cell.column + cell.columnSpan > columns.length
-      ) {
-        unsafe = true
-        diagnostics.push({
-          severity: 'warning',
-          message: `Merged cell at row ${row + 1} is outside the table.`,
-        })
-        cell.rowSpan = 1
-        cell.columnSpan = 1
-      }
-      model.cells[cell.id] = cell
-      for (let y = row; y < row + cell.rowSpan; y++)
-        for (let x = column; x < column + cell.columnSpan; x++)
-          occupied.add(`${y}:${x}`)
-      column += cell.columnSpan
-    }
-  })
-  for (let row = 0; row < model.rows.length; row++) {
-    for (let column = 0; column < model.columns.length; column++) {
-      if (!occupied.has(`${row}:${column}`)) {
-        const cell = parseCell('', row, column)
-        model.cells[cell.id] = cell
-      }
-    }
+  const grid = buildLatexGrid(
+    rawRows.map(row => splitTopLevel(row, '&')),
+    model.rows.length,
+    model.columns.length,
+    parseCell
+  )
+  model.cells = grid.cells
+  diagnostics.push(...grid.diagnostics)
+  unsafe ||= grid.unsafe
+  if (grid.unsafe && !allowUnsafe) {
+    return { model: createTableModel(), diagnostics, unsafe: true }
   }
   for (const cell of getCells(model)) {
     if (cell.columnSpan === 1) {
@@ -887,6 +812,11 @@ export const parseLatexTable = (
   model.unsafeImport = unsafe
   model.diagnostics = diagnostics
   assertModel(model)
+  attachLatexOrigin(
+    model,
+    source,
+    /\\begin\{table\*?\}/.test(source) ? 'table' : 'standalone'
+  )
   return { model, diagnostics, unsafe }
 }
 
