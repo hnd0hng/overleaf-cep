@@ -28,7 +28,7 @@ Alpha & Beta \\ \hline
     expect(generated).not.to.contain('\\begin{table}')
   })
 
-  it('keeps separators inside groups, math, comments, and nested tables opaque', function () {
+  it('keeps separators scoped inside groups, math, comments, and nested tables', function () {
     const source = latex`\begin{tabular}{cc}
 \textbf{A & B} & $x & y$ \\
 \begin{tabular}{c}Inner \\ Value\end{tabular} & Tail % ignored & marker
@@ -40,9 +40,7 @@ Alpha & Beta \\ \hline
     expect(parsed.model.columns).to.have.length(2)
     expect(cellAt(parsed.model, 0, 0)?.content.text).to.equal('A & B')
     expect(cellAt(parsed.model, 0, 1)?.content.rawLatex).to.equal('$x & y$')
-    expect(cellAt(parsed.model, 1, 0)?.content.rawLatex).to.contain(
-      '\\begin{tabular}'
-    )
+    expect(cellAt(parsed.model, 1, 0)?.content.text).to.equal('Inner\nValue')
     expect(cellAt(parsed.model, 1, 1)?.content.text).to.equal('Tail')
   })
 

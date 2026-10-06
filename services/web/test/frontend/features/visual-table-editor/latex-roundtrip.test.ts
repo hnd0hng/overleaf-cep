@@ -364,7 +364,7 @@ L3 & & & R3 \\
     ],
   },
   {
-    name: 'nested tabular preserved as opaque cell content',
+    name: 'single-column nested tabular imported as multiline text',
     source: latex`\begin{tabular}{cc}
 \begin{tabular}{c}Line 1\\Line 2\end{tabular} & Value \\
 \end{tabular}`,
@@ -374,7 +374,7 @@ L3 & & & R3 \\
       {
         row: 0,
         column: 0,
-        rawLatex: latex`\begin{tabular}{c}Line 1\\Line 2\end{tabular}`,
+        text: 'Line 1\nLine 2',
       },
     ],
   },

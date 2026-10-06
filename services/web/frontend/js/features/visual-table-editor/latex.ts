@@ -18,6 +18,7 @@ import { collectSourcePackages } from './latex/generator/package-analyzer'
 import { renderImportedTable } from './latex/generator/source-layout-renderer'
 import { buildLatexGrid } from './latex/grid-builder'
 import { parseLatexFragment, parseLatexSyntax } from './latex/parser'
+import { unwrapNestedCellTable } from './latex/nested-cell-table'
 import type { LatexNode } from './latex/syntax-tree'
 import { readTablePreamble, parseTableBody } from './latex/import-structure'
 import {
@@ -585,6 +586,16 @@ const parseCell = (source: string, row: number, column: number): TableCell => {
       value = italic[0]
       unwrapped = true
       continue
+    }
+    const nestedTable = unwrapNestedCellTable(value)
+    if (nestedTable) {
+      const lines = nestedTable.lines.map(line => decodeLatexText(line.trim()))
+      if (lines.every((line): line is string => line !== undefined)) {
+        value = lines.join('\n')
+        cell.horizontalAlignment ??= nestedTable.alignment
+        unwrapped = true
+        continue
+      }
     }
     const shortstack = unwrapMultiline(value)
     if (shortstack !== undefined) {

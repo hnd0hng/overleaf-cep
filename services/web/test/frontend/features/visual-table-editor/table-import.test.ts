@@ -126,9 +126,8 @@ A & B \\
       expect(result.columns).to.equal(2)
       expect(result.model.options.placement).to.equal('!h')
       expect(result.model.options.label).to.equal('tab:synthetic_summary')
-      expect(cellAt(result.model, 0, 0)?.content.rawLatex).to.contain(
-        '\\begin{tabular}'
-      )
+      expect(cellAt(result.model, 0, 0)?.content.text).to.equal('First\nHeader')
+      expect(cellAt(result.model, 0, 0)?.content.rawLatex).to.equal(undefined)
     })
 
     it('warns about unsupported wrapper spacing commands', function () {

@@ -61,6 +61,7 @@ import {
 } from './model'
 import { commitSession } from './source'
 import { removeDraft, saveDraft } from './persistence'
+import { tableCellHeight, tableRowHeights } from './row-layout'
 import { proposePackages } from './packages'
 import { useProjectContext } from '@/shared/context/project-context'
 import { useEditorOpenDocContext } from '@/features/ide-react/context/editor-open-doc-context'
@@ -188,12 +189,18 @@ export default function VisualTableEditor({
     (index === 0 ||
       (model.rows[index].longtableSection ?? 'body') !==
         (model.rows[index - 1].longtableSection ?? 'body'))
+  const rowHeights = useMemo(() => tableRowHeights(model), [model])
   const rowVirtualizer = useVirtualizer({
     count: model.rows.length,
     getScrollElement: () => viewportRef.current,
-    estimateSize: index => (isLongtableSectionStart(index) ? 66 : 42),
+    estimateSize: index =>
+      rowHeights[index] + (isLongtableSectionStart(index) ? 24 : 0),
     overscan: 8,
   })
+
+  useEffect(() => {
+    rowVirtualizer.measure()
+  }, [rowHeights, rowVirtualizer])
 
   const apply = useCallback(
     (operation: (current: TableModel) => TableModel) => {
@@ -1510,6 +1517,7 @@ export default function VisualTableEditor({
                       (isLongtableSectionStart(virtualRow.index) ? 24 : 0)
                     }px)`,
                     gridTemplateColumns: columnTemplate,
+                    height: rowHeights[virtualRow.index],
                   }}
                 >
                   {isLongtableSectionStart(virtualRow.index) && (
@@ -1584,7 +1592,11 @@ export default function VisualTableEditor({
                         }`}
                         style={{
                           gridColumn: `${column + 2} / span ${cell.columnSpan}`,
-                          height: Math.max(40, cell.rowSpan * 42 - 2),
+                          height: tableCellHeight(
+                            rowHeights,
+                            cell.row,
+                            cell.rowSpan
+                          ),
                           backgroundColor: cell.backgroundColor,
                         }}
                         onPointerDown={event =>
