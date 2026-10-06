@@ -106,9 +106,7 @@ A\&B & C\_D \\
 \end{tabular}`,
     rows: 1,
     columns: 1,
-    cells: [
-      { row: 0, column: 0, text: 'Both', bold: true, italic: true },
-    ],
+    cells: [{ row: 0, column: 0, text: 'Both', bold: true, italic: true }],
   },
   {
     name: 'opaque inline mathematics',
@@ -477,12 +475,13 @@ Header A & Header B \\
 \endhead
 Data A & Data B \\
 \end{longtable}`,
-    rows: 2,
+    rows: 3,
     columns: 2,
     environment: 'longtable',
     cells: [
       { row: 0, column: 0, text: 'Header A' },
-      { row: 1, column: 0, text: 'Data A' },
+      { row: 1, column: 0, text: 'Header A' },
+      { row: 2, column: 0, text: 'Data A' },
     ],
     verify: model => expect(model.rows[0].repeatOnNewPage).to.equal(true),
   },

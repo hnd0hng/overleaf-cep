@@ -4,10 +4,16 @@ import {
   createId,
   emptyBorders,
   HorizontalAlignment,
+  LongtableSection,
   TableCell,
   TableModel,
   VerticalAlignment,
 } from './types'
+import {
+  rowMoveCrossesLongtableSection,
+  sectionForInsertion,
+  selectionCrossesLongtableSection,
+} from './latex/longtable-sections'
 
 export const normalizeSelection = (selection: CellSelection) => ({
   minRow: Math.min(selection.from.row, selection.to.row),
@@ -123,6 +129,11 @@ export const updateCellText = (
 export const mergeSelection = (model: TableModel, selection: CellSelection) => {
   const next = cloneModel(model)
   const range = normalizeSelection(selection)
+  if (selectionCrossesLongtableSection(next, range.minRow, range.maxRow)) {
+    throw new Error(
+      'Cells cannot be merged across a longtable section boundary.'
+    )
+  }
   const cells = selectedCells(next, selection)
   const exactlyCovered = cells.every(
     cell =>
@@ -229,9 +240,30 @@ export const splitSelection = (model: TableModel, selection: CellSelection) => {
   return next
 }
 
-export const insertRow = (model: TableModel, index: number) => {
+export const insertRow = (
+  model: TableModel,
+  index: number,
+  longtableSection?: LongtableSection
+) => {
   const next = cloneModel(model)
-  next.rows.splice(index, 0, { id: createId('row') })
+  const anchoredRowId = next.rows[index]?.id
+  const newRow = {
+    id: createId('row'),
+    longtableSection: longtableSection ?? sectionForInsertion(next, index),
+  }
+  next.rows.splice(index, 0, newRow)
+  if (anchoredRowId) {
+    for (const section of next.latexOrigin?.layout?.sections ?? []) {
+      for (const fragment of section.fragments ?? []) {
+        if (
+          section.kind === (newRow.longtableSection ?? 'body') &&
+          fragment.beforeRowId === anchoredRowId
+        ) {
+          fragment.beforeRowId = newRow.id
+        }
+      }
+    }
+  }
   for (const cell of getCells(next)) {
     if (cell.row >= index) cell.row++
     else if (cell.row + cell.rowSpan > index) cell.rowSpan++
@@ -262,6 +294,20 @@ export const deleteRows = (model: TableModel, from: number, to: number) => {
   const next = cloneModel(model)
   if (to - from + 1 >= next.rows.length)
     throw new Error('A table needs one row')
+  const removedRowIds = new Set(
+    next.rows.slice(from, to + 1).map(row => row.id)
+  )
+  for (const section of next.latexOrigin?.layout?.sections ?? []) {
+    const replacement = next.rows[to + 1]
+    for (const fragment of section.fragments ?? []) {
+      if (fragment.beforeRowId && removedRowIds.has(fragment.beforeRowId)) {
+        fragment.beforeRowId =
+          (replacement?.longtableSection ?? 'body') === section.kind
+            ? replacement.id
+            : undefined
+      }
+    }
+  }
   const count = to - from + 1
   next.rows.splice(from, count)
   for (const cell of getCells(next)) {
@@ -323,6 +369,12 @@ const reorderError = (
     return 'Invalid table reorder range'
   }
   if (insertionIndex >= from && insertionIndex <= to + 1) return null
+  if (
+    axis === 'row' &&
+    rowMoveCrossesLongtableSection(model, from, to, insertionIndex)
+  ) {
+    return 'Rows cannot be moved across a longtable section boundary.'
+  }
 
   for (const cell of getCells(model)) {
     const start = axis === 'row' ? cell.row : cell.column
@@ -426,6 +478,12 @@ export const moveColumn = (model: TableModel, from: number, to: number) =>
   moveColumns(model, from, from, to > from ? to + 1 : to)
 
 export const transpose = (model: TableModel) => {
+  if (
+    model.options.environment === 'longtable' &&
+    model.rows.some(row => row.longtableSection)
+  ) {
+    throw new Error('A structured longtable cannot be transposed.')
+  }
   const next = cloneModel(model)
   const rows = next.rows
   next.rows = next.columns.map(column => ({ id: column.id }))

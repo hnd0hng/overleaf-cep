@@ -1,5 +1,9 @@
 import { generateSHA1Hash } from '@/shared/utils/sha1'
-import type { TableModel } from '../types'
+import type {
+  LatexSourceLayout,
+  TableModel,
+  TableWrapperEnvironment,
+} from '../types'
 
 const semanticModel = (model: TableModel) => ({
   schemaVersion: model.schemaVersion,
@@ -16,12 +20,14 @@ export const modelFingerprint = (model: TableModel) =>
 export const attachLatexOrigin = (
   model: TableModel,
   source: string,
-  wrapper: 'standalone' | 'table'
+  wrapper: TableWrapperEnvironment,
+  layout?: LatexSourceLayout
 ) => {
   model.latexOrigin = {
     source,
     wrapper,
     modelFingerprint: modelFingerprint(model),
+    layout,
   }
 }
 

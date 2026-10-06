@@ -589,3 +589,20 @@
     }
   }
 }
+
+.vte-longtable-section-separator {
+  position: absolute;
+  inset-block-start: -24px;
+  inset-inline: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding-inline: var(--spacing-04);
+  border-block-end: 1px solid var(--vte-border);
+  background: var(--vte-surface-secondary);
+  color: var(--content-secondary-themed);
+  font-size: var(--font-size-01);
+  font-weight: 600;
+  pointer-events: none;
+}

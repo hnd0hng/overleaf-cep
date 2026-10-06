@@ -1,4 +1,21 @@
-export type TableEnvironment = 'tabular' | 'tabularx' | 'longtable'
+export type TableEnvironment =
+  | 'tabular'
+  | 'tabular*'
+  | 'tabularx'
+  | 'xltabular'
+  | 'longtable'
+export type TableWrapperEnvironment =
+  | 'standalone'
+  | 'table'
+  | 'table*'
+  | 'sidewaystable'
+  | 'sidewaystable*'
+export type LongtableSection =
+  | 'firstHead'
+  | 'head'
+  | 'foot'
+  | 'lastFoot'
+  | 'body'
 export type HorizontalAlignment = 'left' | 'center' | 'right'
 export type VerticalAlignment = 'top' | 'middle' | 'bottom'
 export type BorderStyle =
@@ -60,6 +77,7 @@ export type TableColumn = {
 export type TableRow = {
   id: string
   repeatOnNewPage?: boolean
+  longtableSection?: LongtableSection
 }
 
 export type TableOptions = {
@@ -71,6 +89,39 @@ export type TableOptions = {
   centered: boolean
   scale: 'none' | 'textwidth' | 'columnwidth'
   placement: string
+  environmentPosition?: string
+}
+
+export type LatexMetadataCommand = {
+  token: string
+  kind: 'caption' | 'label'
+  raw: string
+  value: string
+  primary: boolean
+  star?: boolean
+  optionalArgument?: string
+}
+
+export type LatexAnchoredFragment = {
+  beforeRowId?: string
+  template: string
+}
+
+export type LatexLongtableSectionLayout = {
+  kind: LongtableSection
+  marker?: string
+  prefixTemplate: string
+  suffixTemplate: string
+  fragments?: LatexAnchoredFragment[]
+}
+
+export type LatexSourceLayout = {
+  wrapper: TableWrapperEnvironment
+  beforeGridTemplate: string
+  afterGridTemplate: string
+  metadata: LatexMetadataCommand[]
+  gridEnvironment: TableEnvironment
+  sections?: LatexLongtableSectionLayout[]
 }
 
 export type TableModel = {
@@ -83,8 +134,9 @@ export type TableModel = {
   /** Original LaTeX is retained only while the imported model is unchanged. */
   latexOrigin?: {
     source: string
-    wrapper: 'standalone' | 'table'
+    wrapper: TableWrapperEnvironment
     modelFingerprint: string
+    layout?: LatexSourceLayout
   }
   diagnostics: Diagnostic[]
 }

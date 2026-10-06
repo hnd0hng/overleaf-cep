@@ -46,6 +46,8 @@ const signatures: Record<string, ArgumentKind[]> = {
 const environmentSignatures: Record<string, ArgumentKind[]> = {
   table: ['optional'],
   'table*': ['optional'],
+  sidewaystable: ['optional'],
+  'sidewaystable*': ['optional'],
   tabular: ['optional', 'mandatory'],
   'tabular*': ['mandatory', 'optional', 'mandatory'],
   tabularx: ['mandatory', 'mandatory'],

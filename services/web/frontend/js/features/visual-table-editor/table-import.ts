@@ -97,13 +97,15 @@ const validateCompleteLatexTable = (source: string) => {
   const environment = location.environment
   const isStandalone =
     location.beginStart === 0 && location.endEnd === normalized.length
+  const wrapperMatch = normalized.match(
+    /^\\begin\{(table\*?|sidewaystable\*?)\}(?:\[[^\]]*\])?/
+  )
   const isTableWrapper =
-    /^\\begin\{table\}(?:\[[^\]]*\])?/.test(normalized) &&
-    normalized.endsWith('\\end{table}')
+    Boolean(wrapperMatch) && normalized.endsWith(`\\end{${wrapperMatch?.[1]}}`)
 
   if (!isStandalone && !isTableWrapper) {
     throw new Error(
-      'Enter a complete tabular, tabularx, or longtable environment, optionally wrapped in a table environment.'
+      'Enter a complete tabular, tabular*, tabularx, xltabular, or longtable environment, optionally wrapped in table, table*, or sidewaystable.'
     )
   }
   return { normalized, environment }

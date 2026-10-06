@@ -8,7 +8,8 @@ import { SourceAnchor } from './types'
 
 export type LocatedTable = { from: number; to: number; source: string }
 
-const supportedEnvironment = /^(table\*?|tabular|tabularx|longtable)$/
+const supportedEnvironment =
+  /^(?:table\*?|sidewaystable\*?|tabular\*?|tabularx|xltabular|longtable)$/
 
 export const locateTableAtSelection = (
   view: EditorView
@@ -20,16 +21,11 @@ export const locateTableAtSelection = (
   )
   let best: LocatedTable | null = null
   while (node) {
-    if (
-      node.type.is('TableEnvironment') ||
-      node.type.is('TabularEnvironment')
-    ) {
-      const source = view.state.sliceDoc(node.from, node.to)
-      const name = source.match(/^\\begin\{([^}]+)\}/)?.[1]
-      if (name && supportedEnvironment.test(name)) {
-        best = { from: node.from, to: node.to, source }
-        if (node.type.is('TableEnvironment')) return best
-      }
+    const source = view.state.sliceDoc(node.from, node.to)
+    const name = source.match(/^\\begin\{([^}]+)\}/)?.[1]
+    if (name && supportedEnvironment.test(name)) {
+      best = { from: node.from, to: node.to, source }
+      if (/^(?:table\*?|sidewaystable\*?)$/.test(name)) return best
     }
     node = node.parent
   }

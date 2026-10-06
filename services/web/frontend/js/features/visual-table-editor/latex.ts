@@ -8,15 +8,23 @@ import {
   TableColumn,
   TableEnvironment,
   TableModel,
+  LatexLongtableSectionLayout,
 } from './types'
 import { assertModel, cellAt, getCells } from './model'
 import { parseColumnSpecification } from './latex/column-spec'
+import { environmentNeedsWidth, isTableEnvironment } from './latex/environment'
 import { analyzeBoundaryRules } from './latex/generator/boundary-analyzer'
 import { collectSourcePackages } from './latex/generator/package-analyzer'
+import { renderImportedTable } from './latex/generator/source-layout-renderer'
 import { buildLatexGrid } from './latex/grid-builder'
 import { parseLatexFragment, parseLatexSyntax } from './latex/parser'
 import type { LatexNode } from './latex/syntax-tree'
-import { extractRowStructure } from './latex/row-extractor'
+import { readTablePreamble, parseTableBody } from './latex/import-structure'
+import {
+  collectMetadataSpans,
+  detectWrapper,
+  templateSourceRange,
+} from './latex/source-layout'
 import {
   attachLatexOrigin,
   unchangedLatexSource,
@@ -135,7 +143,11 @@ export const generateLatex = (model: TableModel): GenerationResult => {
   }
   if (model.options.style === 'booktabs') packages.add('booktabs')
   if (model.options.environment === 'tabularx') packages.add('tabularx')
+  if (model.options.environment === 'xltabular') packages.add('xltabular')
   if (model.options.environment === 'longtable') packages.add('longtable')
+  if (model.latexOrigin?.wrapper.startsWith('sidewaystable')) {
+    packages.add('rotating')
+  }
 
   const rowLines: string[] = []
   for (let row = 0; row < model.rows.length; row++) {
@@ -166,10 +178,28 @@ export const generateLatex = (model: TableModel): GenerationResult => {
   const trailingRules = trailingRule ? [trailingRule] : []
 
   const environment = model.options.environment
-  const begin =
-    environment === 'tabularx'
-      ? `\\begin{tabularx}{${model.options.targetWidth}}{${columnSpec}}`
-      : `\\begin{${environment}}{${columnSpec}}`
+  const position = model.options.environmentPosition
+    ? `[${model.options.environmentPosition}]`
+    : ''
+  const begin = environmentNeedsWidth(environment)
+    ? `\\begin{${environment}}{${model.options.targetWidth}}${environment === 'tabular*' ? position : ''}{${columnSpec}}`
+    : `\\begin{${environment}}${position}{${columnSpec}}`
+
+  const importedLatex = renderImportedTable(
+    model,
+    begin,
+    rowLines,
+    trailingRules,
+    escapeLatex
+  )
+  if (importedLatex) {
+    return {
+      latex: preservedSource ?? importedLatex,
+      packages: [...packages],
+      warnings,
+    }
+  }
+
   if (environment === 'longtable') {
     const prefix = [
       model.options.caption
@@ -489,16 +519,6 @@ const decodeLatexText = (value: string) => {
     .replace(/\\([&%$#_{}])/g, '$1')
 }
 
-const readCommandArgument = (source: string, command: string) => {
-  const prefix = '\\' + command
-  const start = source.indexOf(prefix)
-  if (start < 0) return
-  let cursor = start + prefix.length
-  while (/\s/.test(source[cursor])) cursor++
-  if (source[cursor] !== '{') return
-  return readBalanced(source, cursor).value
-}
-
 const stripLatexComments = (source: string) =>
   source.replace(/(^|[^\\])%[^\n]*(?:\n|$)/g, '$1')
 
@@ -601,12 +621,11 @@ export type TableEnvironmentLocation = {
 export const locateTableEnvironment = (
   source: string
 ): TableEnvironmentLocation => {
-  const supported = new Set(['tabular', 'tabularx', 'longtable'])
   const roots: TableEnvironmentLocation[] = []
   const visit = (nodes: LatexNode[], insideSupported = false) => {
     for (const node of nodes) {
       const isSupported =
-        node.kind === 'environment' && supported.has(node.name)
+        node.kind === 'environment' && isTableEnvironment(node.name)
       if (node.kind === 'environment' && isSupported) {
         if (!insideSupported) {
           const beginEnd = source.indexOf('}', node.from) + 1
@@ -644,83 +663,42 @@ export const parseLatexTable = (
   const diagnostics: Diagnostic[] = []
   const location = locateTableEnvironment(source)
   const environment = location.environment
-  let cursor = location.beginEnd
-  let targetWidth = '\\textwidth'
-  if (environment === 'tabularx') {
-    while (/\s/.test(source[cursor])) cursor++
-    const width = readBalanced(source, cursor)
-    targetWidth = width.value
-    cursor = width.end
-  }
-  while (/\s/.test(source[cursor])) cursor++
-  const specification = readBalanced(source, cursor)
-  const columnResult = parseColumnSpecification(specification.value)
+  const preamble = readTablePreamble(source, location, environment)
+  const columnResult = parseColumnSpecification(preamble.specification)
   const { columns, verticalBoundaries } = columnResult
   diagnostics.push(...columnResult.diagnostics)
-  let body = source.slice(specification.end, location.endStart)
-  let repeatHeaderRowCount = 0
-  let malformedLongtableHeaders = false
-  if (environment === 'longtable') {
-    const caption = unwrapLeadingCommand(body, 'caption')
-    if (caption) body = caption.remainder
-    const label = unwrapLeadingCommand(body, 'label')
-    if (label) body = label.remainder
-    if (body.trimStart().startsWith('\\\\')) {
-      body = body.trimStart().slice(2)
-    }
-
-    const firstHead = body.indexOf('\\endfirsthead')
-    const repeatedHead = body.indexOf('\\endhead')
-    if (firstHead >= 0 && repeatedHead > firstHead) {
-      const repeated = body.slice(
-        firstHead + '\\endfirsthead'.length,
-        repeatedHead
-      )
-      repeatHeaderRowCount = splitTopLevel(repeated, '\\\\').filter(chunk =>
-        chunk
-          .replace(
-            /\\(?:hline|cline\{\d+-\d+\}|toprule|midrule|bottomrule)\s*/g,
-            ''
-          )
-          .trim()
-      ).length
-      body = repeated + body.slice(repeatedHead + '\\endhead'.length)
-    } else if (firstHead >= 0 || repeatedHead >= 0) {
-      malformedLongtableHeaders = true
-    }
+  const metadataSpans = collectMetadataSpans(source, decodeLatexText)
+  const looseRowSeparators = normalizeLooseRowSeparators(preamble.body)
+  const parsedBody = parseTableBody(
+    looseRowSeparators.normalized,
+    preamble.bodyStart,
+    environment,
+    columns.length,
+    metadataSpans
+  )
+  for (const message of parsedBody.diagnostics) {
+    diagnostics.push({ severity: 'warning', message })
   }
-  const looseRowSeparators = normalizeLooseRowSeparators(body)
-  body = looseRowSeparators.normalized
-  const unsafeCommands = body.match(
-    /\\(cmidrule|specialrule|addlinespace|rowcolor|hhline|endfoot|endlastfoot)\b/g
+  const unsafeCommands = preamble.body.match(
+    /\\(cmidrule|specialrule|addlinespace|rowcolor|hhline)\b/g
   )
   const wrapperSource =
     source.slice(0, location.beginStart) + source.slice(location.endEnd)
   const unsafeWrapperCommands = wrapperSource.match(/\\setlength\b/g)
-  let unsafe = Boolean(
-    unsafeCommands ||
-    unsafeWrapperCommands ||
-    malformedLongtableHeaders ||
-    looseRowSeparators.replacements ||
-    columnResult.unsafe
-  )
   if (unsafeCommands) {
     diagnostics.push({
       severity: 'warning',
-      message: `The table contains unsupported structure: ${[...new Set(unsafeCommands)].join(', ')}`,
-    })
-  }
-  if (malformedLongtableHeaders) {
-    diagnostics.push({
-      severity: 'warning',
-      message:
-        'The longtable header must contain both \\endfirsthead and \\endhead.',
+      message: `The table contains unsupported structure: ${[
+        ...new Set(unsafeCommands),
+      ].join(', ')}`,
     })
   }
   if (unsafeWrapperCommands) {
     diagnostics.push({
       severity: 'warning',
-      message: `The table wrapper contains unsupported structure: ${[...new Set(unsafeWrapperCommands)].join(', ')}`,
+      message: `The table wrapper contains unsupported structure: ${[
+        ...new Set(unsafeWrapperCommands),
+      ].join(', ')}`,
     })
   }
   if (looseRowSeparators.replacements) {
@@ -729,39 +707,48 @@ export const parseLatexTable = (
       message: `Found ${looseRowSeparators.replacements} single-backslash row separator${looseRowSeparators.replacements === 1 ? '' : 's'} before \\hline or \\cline. They will be interpreted as \\\\.`,
     })
   }
+  let unsafe = Boolean(
+    unsafeWrapperCommands ||
+    unsafeCommands ||
+    parsedBody.diagnostics.length ||
+    looseRowSeparators.replacements ||
+    columnResult.unsafe
+  )
   if (unsafe && !allowUnsafe) {
     return { model: createTableModel(), diagnostics, unsafe: true }
   }
-  const rawRows: string[] = []
-  const rulesAtBoundary = new Map<number, Array<readonly [number, number]>>()
-  for (const chunk of splitTopLevel(body, '\\\\')) {
-    const boundary = rawRows.length
-    const { content, rules } = extractRowStructure(chunk, columns.length)
-    if (rules.length) {
-      rulesAtBoundary.set(boundary, [
-        ...(rulesAtBoundary.get(boundary) ?? []),
-        ...rules,
-      ])
-    }
-    if (content.trim()) rawRows.push(content)
-  }
+  const { rawRows, rowSections, rulesAtBoundary, sectionLayouts } = parsedBody
   const model = createTableModel(Math.max(1, rawRows.length), columns.length)
   model.columns = columns
   model.cells = {}
   model.options.environment = environment
-  model.options.targetWidth = targetWidth
+  model.options.targetWidth = preamble.targetWidth
+  model.options.environmentPosition = preamble.environmentPosition
+  for (let index = 0; index < model.rows.length; index++) {
+    model.rows[index].longtableSection =
+      rowSections[index] ?? (environment === 'longtable' ? 'body' : undefined)
+    if (environment === 'longtable') {
+      model.rows[index].repeatOnNewPage =
+        rowSections[index] === 'firstHead' || rowSections[index] === 'head'
+    }
+  }
   model.options.style = /\\(toprule|midrule|bottomrule)/.test(source)
     ? 'booktabs'
     : 'default'
   model.options.centered = /\\centering\b/.test(source)
-  const wrapper = source.match(/\\begin\{table\}(?:\[([^\]]*)\])?/)
+  const wrapperName = detectWrapper(source, location.beginStart)
+  const wrapper = source
+    .slice(0, location.beginStart)
+    .match(/\\begin\{(?:table\*?|sidewaystable\*?)\}(?:\[([^\]]*)\])?/)
   if (wrapper?.[1] !== undefined) {
     model.options.placement = wrapper[1]
   }
-  const captionArgument = readCommandArgument(source, 'caption') ?? ''
-  model.options.caption = decodeLatexText(captionArgument) ?? captionArgument
-  const labelArgument = readCommandArgument(source, 'label') ?? ''
-  model.options.label = decodeLatexText(labelArgument) ?? labelArgument
+  model.options.caption =
+    metadataSpans.find(command => command.kind === 'caption' && command.primary)
+      ?.value ?? ''
+  model.options.label =
+    metadataSpans.find(command => command.kind === 'label' && command.primary)
+      ?.value ?? ''
   model.options.scale = /\\resizebox\{\\textwidth\}/.test(source)
     ? 'textwidth'
     : /\\resizebox\{\\columnwidth\}/.test(source)
@@ -778,6 +765,24 @@ export const parseLatexTable = (
   unsafe ||= grid.unsafe
   if (grid.unsafe && !allowUnsafe) {
     return { model: createTableModel(), diagnostics, unsafe: true }
+  }
+  const crossesSection = getCells(model).some(cell => {
+    const sections = new Set(
+      model.rows
+        .slice(cell.row, cell.row + cell.rowSpan)
+        .map(row => row.longtableSection ?? 'body')
+    )
+    return sections.size > 1
+  })
+  if (crossesSection) {
+    unsafe = true
+    diagnostics.push({
+      severity: 'warning',
+      message: 'A multirow cell cannot cross a longtable section boundary.',
+    })
+    if (!allowUnsafe) {
+      return { model: createTableModel(), diagnostics, unsafe: true }
+    }
   }
   for (const cell of getCells(model)) {
     if (cell.columnSpan === 1) {
@@ -802,21 +807,45 @@ export const parseLatexTable = (
       }
     }
   }
-  for (
-    let row = 0;
-    row < repeatHeaderRowCount && row < model.rows.length;
-    row++
-  ) {
-    model.rows[row].repeatOnNewPage = true
-  }
+  const longtableLayouts: LatexLongtableSectionLayout[] | undefined =
+    environment === 'longtable'
+      ? sectionLayouts.map(section => ({
+          kind: section.kind,
+          marker: section.marker,
+          prefixTemplate: section.prefixTemplate,
+          suffixTemplate: section.suffixTemplate,
+          fragments: section.pending.map(fragment => ({
+            beforeRowId:
+              fragment.beforeRowIndex === undefined
+                ? undefined
+                : model.rows[fragment.beforeRowIndex]?.id,
+            template: fragment.template,
+          })),
+        }))
+      : undefined
   model.unsafeImport = unsafe
   model.diagnostics = diagnostics
   assertModel(model)
-  attachLatexOrigin(
-    model,
-    source,
-    /\\begin\{table\*?\}/.test(source) ? 'table' : 'standalone'
-  )
+  attachLatexOrigin(model, source, wrapperName, {
+    wrapper: wrapperName,
+    beforeGridTemplate: templateSourceRange(
+      source,
+      0,
+      location.beginStart,
+      metadataSpans
+    ),
+    afterGridTemplate: templateSourceRange(
+      source,
+      location.endEnd,
+      source.length,
+      metadataSpans
+    ),
+    metadata: metadataSpans.map(
+      ({ from: _from, to: _to, ...command }) => command
+    ),
+    gridEnvironment: environment,
+    sections: longtableLayouts,
+  })
   return { model, diagnostics, unsafe }
 }
 

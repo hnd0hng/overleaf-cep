@@ -33,6 +33,7 @@ import {
 } from './csv'
 import { nextMatchIndex } from './find-replace'
 import { generateLatex } from './latex'
+import { LONGTABLE_SECTION_LABELS } from './latex/longtable-sections'
 import { TableHistory } from './history'
 import {
   applyAlignment,
@@ -182,10 +183,15 @@ export default function VisualTableEditor({
     [generated.latex, initialSession, model, selection]
   )
 
+  const isLongtableSectionStart = (index: number) =>
+    model.options.environment === 'longtable' &&
+    (index === 0 ||
+      (model.rows[index].longtableSection ?? 'body') !==
+        (model.rows[index - 1].longtableSection ?? 'body'))
   const rowVirtualizer = useVirtualizer({
     count: model.rows.length,
     getScrollElement: () => viewportRef.current,
-    estimateSize: () => 42,
+    estimateSize: index => (isLongtableSectionStart(index) ? 66 : 42),
     overscan: 8,
   })
 
@@ -807,7 +813,13 @@ export default function VisualTableEditor({
               icon="vertical_align_top"
               label="Insert row above"
               onClick={() =>
-                apply(current => insertRow(current, selectedRange.minRow))
+                apply(current =>
+                  insertRow(
+                    current,
+                    selectedRange.minRow,
+                    current.rows[selectedRange.minRow].longtableSection
+                  )
+                )
               }
             />
             <VisualTableToolbarButton
@@ -815,7 +827,13 @@ export default function VisualTableEditor({
               icon="vertical_align_bottom"
               label="Insert row below"
               onClick={() =>
-                apply(current => insertRow(current, selectedRange.maxRow + 1))
+                apply(current =>
+                  insertRow(
+                    current,
+                    selectedRange.maxRow + 1,
+                    current.rows[selectedRange.maxRow].longtableSection
+                  )
+                )
               }
             />
             <VisualTableToolbarButton
@@ -888,6 +906,10 @@ export default function VisualTableEditor({
               tooltipId="vte-transpose"
               icon="swap_horiz"
               label="Transpose table"
+              disabled={
+                model.options.environment === 'longtable' &&
+                model.rows.some(row => row.longtableSection)
+              }
               onClick={() => apply(current => transpose(current))}
             />
           </div>
@@ -1086,7 +1108,9 @@ export default function VisualTableEditor({
                   }
                 >
                   <option value="tabular">tabular</option>
+                  <option value="tabular*">tabular*</option>
                   <option value="tabularx">tabularx</option>
+                  <option value="xltabular">xltabular</option>
                   <option value="longtable">longtable</option>
                 </OLFormSelect>
               </label>
@@ -1481,10 +1505,32 @@ export default function VisualTableEditor({
                   }`}
                   key={model.rows[virtualRow.index].id}
                   style={{
-                    transform: `translateY(${virtualRow.start}px)`,
+                    transform: `translateY(${
+                      virtualRow.start +
+                      (isLongtableSectionStart(virtualRow.index) ? 24 : 0)
+                    }px)`,
                     gridTemplateColumns: columnTemplate,
                   }}
                 >
+                  {isLongtableSectionStart(virtualRow.index) && (
+                    <div
+                      className="vte-longtable-section-separator"
+                      role="separator"
+                      aria-label={
+                        LONGTABLE_SECTION_LABELS[
+                          model.rows[virtualRow.index].longtableSection ??
+                            'body'
+                        ]
+                      }
+                    >
+                      {
+                        LONGTABLE_SECTION_LABELS[
+                          model.rows[virtualRow.index].longtableSection ??
+                            'body'
+                        ]
+                      }
+                    </div>
+                  )}
                   <div
                     className={`vte-row-header ${
                       selectedRange.minColumn === 0 &&
