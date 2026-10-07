@@ -29,16 +29,19 @@ Visible \\
     const parsed = parseLatexTable(source)
 
     expect(parsed.model.rows).to.have.length(1)
-    expect(generateLatex(parsed.model).latex).to.equal(source)
+    const generated = generateLatex(parsed.model).latex
+    expect(generated).to.contain('Visible')
+    expect(generated).not.to.contain('Ignored')
+    expect(parseLatexTable(generated).model.rows).to.have.length(1)
   })
 
-  it('collects packages from preserved opaque source constructs', function () {
+  it('collects packages from semantic raw cell content', function () {
     const source = latex`\begin{tabular}{c}
 \makecell{One \\ Two} \\
 \end{tabular}`
     const generated = generateLatex(parseLatexTable(source).model)
 
-    expect(generated.latex).to.equal(source)
+    expect(generated.latex).to.match(/\\makecell/)
     expect(generated.packages).to.include('makecell')
   })
 })

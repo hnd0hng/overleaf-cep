@@ -44,12 +44,6 @@ export const analyzeBoundaryRules = (model: TableModel) => {
   }
 
   return (boundary: number) => {
-    if (model.options.style === 'booktabs') {
-      if (boundary === 0) return '\\toprule'
-      if (boundary === model.rows.length) return '\\bottomrule'
-      if (boundary === 1) return '\\midrule'
-    }
-
     const intervals = boundaries.get(boundary) ?? []
     if (!intervals.length) return ''
     if (
@@ -57,7 +51,10 @@ export const analyzeBoundaryRules = (model: TableModel) => {
       intervals[0][0] === 1 &&
       intervals[0][1] === model.columns.length
     ) {
-      return model.options.style === 'booktabs' ? '\\midrule' : '\\hline'
+      if (model.options.style !== 'booktabs') return '\\hline'
+      if (boundary === 0) return '\\toprule'
+      if (boundary === model.rows.length) return '\\bottomrule'
+      return '\\midrule'
     }
     const command =
       model.options.style === 'booktabs' ? '\\cmidrule' : '\\cline'

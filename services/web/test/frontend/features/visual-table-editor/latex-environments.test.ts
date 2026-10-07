@@ -220,4 +220,37 @@ Body value \\
       generated.indexOf('\\label{tab:bottom-synthetic}')
     )
   })
+
+  it('keeps horizontal rules inside their original longtable sections', function () {
+    const source = latex`\begin{longtable}{cc}
+\toprule
+First A & First B \\
+\endfirsthead
+\midrule
+Head A & Head B \\
+\endhead
+Foot A & Foot B \\
+\bottomrule
+\endfoot
+Body A & Body B \\
+\end{longtable}`
+    const parsed = parseLatexTable(source)
+    const edited = updateCellText(
+      parsed.model,
+      { row: 3, column: 0 },
+      'Changed body'
+    )
+    const generated = generateLatex(edited).latex
+
+    expect(generated.indexOf('\\toprule')).to.be.lessThan(
+      generated.indexOf('\\endfirsthead')
+    )
+    expect(generated.indexOf('\\midrule')).to.be.greaterThan(
+      generated.indexOf('\\endfirsthead')
+    )
+    expect(generated.indexOf('\\bottomrule')).to.be.lessThan(
+      generated.indexOf('\\endfoot')
+    )
+    expect(generated).to.contain('Changed body & Body B')
+  })
 })

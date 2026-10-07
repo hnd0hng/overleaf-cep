@@ -105,6 +105,23 @@ A & B \\
       expect(result.model.options.caption).to.equal('Imported')
     })
 
+    it('accepts balanced transparent wrapper environments', function () {
+      const source = String.raw`\begin{landscape}
+\begin{center}
+\begin{tabular}{cc}
+Alpha & Beta \\
+\end{tabular}
+\end{center}
+\end{landscape}`
+      const warning = parseLatexImport(source)
+      const imported = parseLatexImport(source, true)
+
+      expect(warning.unsafe).to.equal(true)
+      expect(imported.rows).to.equal(1)
+      expect(imported.columns).to.equal(2)
+      expect(cellAt(imported.model, 0, 0)?.content.text).to.equal('Alpha')
+    })
+
     it('accepts nested table environments inside cells', function () {
       const source = [
         '\\begin{table}[!h]',
@@ -130,7 +147,7 @@ A & B \\
       expect(cellAt(result.model, 0, 0)?.content.rawLatex).to.equal(undefined)
     })
 
-    it('warns about unsupported wrapper spacing commands', function () {
+    it('imports supported wrapper spacing directives', function () {
       const source = [
         '\\begin{table}[!b]',
         '\\setlength{\\tabcolsep}{3pt}',
@@ -140,15 +157,20 @@ A & B \\
         '\\label{tab:synthetic\\_spacing}',
         '\\end{table}',
       ].join('\n')
-      const warning = parseLatexImport(source)
-      expect(warning.unsafe).to.equal(true)
+      const imported = parseLatexImport(source)
+      expect(imported.unsafe).to.equal(false)
+      expect(imported.model.options.placement).to.equal('!b')
+      expect(imported.model.options.label).to.equal('tab:synthetic_spacing')
       expect(
-        warning.diagnostics.map(item => item.message).join(' ')
-      ).to.contain('\\setlength')
-
-      const accepted = parseLatexImport(source, true)
-      expect(accepted.model.options.placement).to.equal('!b')
-      expect(accepted.model.options.label).to.equal('tab:synthetic_spacing')
+        imported.model.options.directives?.find(
+          directive => directive.kind === 'tabcolsep'
+        )
+      ).to.deep.include({
+        kind: 'tabcolsep',
+        position: 'before-grid',
+        value: '3pt',
+        scoped: false,
+      })
     })
 
     it('repairs single-backslash row separators before horizontal rules after approval', function () {
@@ -159,9 +181,9 @@ A & B \\
 
       const warning = parseLatexImport(source)
       expect(warning.unsafe).to.equal(true)
-      expect(warning.diagnostics.map(item => item.message).join(' ')).to.contain(
-        'single-backslash row separators'
-      )
+      expect(
+        warning.diagnostics.map(item => item.message).join(' ')
+      ).to.contain('single-backslash row separators')
 
       const accepted = parseLatexImport(source, true)
       expect(accepted.rows).to.equal(2)
@@ -178,7 +200,7 @@ Value\ (masked) \\
 \end{tabular}`)
 
       expect(result.unsafe).to.equal(false)
-      expect(cellAt(result.model, 0, 0)?.content.text).to.equal(
+      expect(cellAt(result.model, 0, 0)?.content.rawLatex).to.equal(
         String.raw`Value\ (masked)`
       )
     })
@@ -200,7 +222,7 @@ Value\ (masked) \\
 
     it('requires approval before materializing an unsafe import', function () {
       const source = String.raw`\begin{tabular}{cc}
-A & B \\ \cmidrule{1-2}
+A & B \\ \specialrule{1pt}{0pt}{0pt}
 C & D \\
 \end{tabular}`
       const warning = parseLatexImport(source)

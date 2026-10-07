@@ -236,11 +236,33 @@ class LatexParser {
     for (const kind of signature) {
       const beforeWhitespace = this.position
       this.skipWhitespaceAndComments()
-      const opening = kind === 'optional' ? '[' : '{'
+      const opening =
+        kind === 'optional' ? '[' : kind === 'parenthesized' ? '(' : '{'
       if (this.source[this.position] !== opening) {
         this.position = beforeWhitespace
-        if (kind === 'optional') continue
+        if (kind === 'optional' || kind === 'parenthesized') continue
         break
+      }
+      if (kind === 'parenthesized') {
+        const from = this.position++
+        let depth = 1
+        while (this.position < this.source.length && depth > 0) {
+          if (this.source[this.position] === '\\') {
+            this.position += 2
+            continue
+          }
+          if (this.source[this.position] === '(') depth++
+          if (this.source[this.position] === ')') depth--
+          this.position++
+        }
+        if (depth) throw new Error('Unclosed parenthesized argument.')
+        arguments_.push({
+          optional: true,
+          from,
+          to: this.position,
+          children: [],
+        })
+        continue
       }
       const from = this.position++
       const children = this.parseSequence(kind === 'optional' ? ']' : '}')

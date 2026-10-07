@@ -48,7 +48,7 @@ describe('VisualTableImportPanel', function () {
     fireEvent.change(screen.getByLabelText('Table text'), {
       target: {
         value: String.raw`\begin{tabular}{cc}
-A & B \\ \cmidrule{1-2}
+A & B \\ \specialrule{1pt}{0pt}{0pt}
 C & D \\
 \end{tabular}`,
       },

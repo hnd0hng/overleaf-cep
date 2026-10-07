@@ -63,6 +63,8 @@ const structuralCommands = new Set([
 export const extractRowStructure = (source: string, columnCount: number) => {
   const nodes = parseLatexFragment(source)
   const rules: RuleInterval[] = []
+  const structural: string[] = []
+  let rowColor: string | undefined
   let content = ''
   let cursor = 0
   for (const node of nodes) {
@@ -72,7 +74,16 @@ export const extractRowStructure = (source: string, columnCount: number) => {
     if (ruleCommands.has(node.name)) {
       rules.push(...intervalForCommand(source, node, columnCount))
     }
+    if (node.name === 'rowcolor') {
+      rowColor = argumentText(source, node).trim()
+    }
+    structural.push(source.slice(node.from, node.to))
   }
   content += source.slice(cursor)
-  return { content, rules }
+  return {
+    content,
+    rules,
+    rowColor,
+    structuralTemplate: structural.join(' '),
+  }
 }

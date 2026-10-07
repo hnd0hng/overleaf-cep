@@ -1,27 +1,42 @@
-import type { Diagnostic, HorizontalAlignment, TableColumn } from '../types'
+import type {
+  BorderStyle,
+  Diagnostic,
+  HorizontalAlignment,
+  TableColumn,
+} from '../types'
 
 type ColumnParseResult = {
   columns: TableColumn[]
-  verticalBoundaries: Set<number>
+  verticalBoundaries: BorderStyle[]
   diagnostics: Diagnostic[]
   unsafe: boolean
 }
 
-const readGroup = (source: string, start: number) => {
-  if (source[start] !== '{') throw new Error('Expected { in column definition.')
+const readDelimitedGroup = (
+  source: string,
+  start: number,
+  opening: '{' | '[' = '{'
+) => {
+  const closing = opening === '{' ? '}' : ']'
+  if (source[start] !== opening) {
+    throw new Error(`Expected ${opening} in column definition.`)
+  }
   let depth = 0
   for (let index = start; index < source.length; index++) {
     if (source[index] === '\\') {
       index++
       continue
     }
-    if (source[index] === '{') depth++
-    else if (source[index] === '}' && --depth === 0) {
+    if (source[index] === opening) depth++
+    else if (source[index] === closing && --depth === 0) {
       return { value: source.slice(start + 1, index), end: index + 1 }
     }
   }
-  throw new Error('Unclosed group in column definition.')
+  throw new Error(`Unclosed ${opening} in column definition.`)
 }
+
+const readGroup = (source: string, start: number) =>
+  readDelimitedGroup(source, start)
 
 const alignmentFromModifier = (
   modifier: string
@@ -35,10 +50,11 @@ export const parseColumnSpecification = (
   specification: string
 ): ColumnParseResult => {
   const columns: TableColumn[] = []
-  const verticalBoundaries = new Set<number>()
+  const verticalBoundaries: BorderStyle[] = []
   const diagnostics: Diagnostic[] = []
   let unsafe = false
   let pendingAlignment: HorizontalAlignment | undefined
+  let pendingBackgroundColor: string | undefined
 
   const addColumn = (
     alignment: HorizontalAlignment,
@@ -48,10 +64,14 @@ export const parseColumnSpecification = (
     columns.push({
       id: `column-${columns.length}`,
       alignment: pendingAlignment ?? alignment,
+      alignmentExplicit:
+        width.mode === 'fixed' ? pendingAlignment !== undefined : undefined,
       verticalAlignment,
+      backgroundColor: pendingBackgroundColor,
       width,
     })
     pendingAlignment = undefined
+    pendingBackgroundColor = undefined
   }
 
   const parseRange = (source: string) => {
@@ -59,12 +79,16 @@ export const parseColumnSpecification = (
       const character = source[index]
       if (/\s/.test(character)) continue
       if (character === '|' || character === ':') {
-        verticalBoundaries.add(columns.length)
+        const boundary = columns.length
+        verticalBoundaries[boundary] =
+          character === '|' && verticalBoundaries[boundary] === 'solid'
+            ? 'double'
+            : 'solid'
         if (character === ':') {
           unsafe = true
           diagnostics.push({
             severity: 'warning',
-            message: 'Dashed vertical rules are shown as solid rules.',
+            message: 'Dashed vertical rules are converted to solid rules.',
           })
         }
         continue
@@ -95,11 +119,14 @@ export const parseColumnSpecification = (
         if (character === '>') {
           pendingAlignment =
             alignmentFromModifier(argument.value) ?? pendingAlignment
+          pendingBackgroundColor =
+            argument.value.match(/\\columncolor\s*\{([^{}]+)\}/)?.[1] ??
+            pendingBackgroundColor
         } else if (character === '@' || character === '!') {
           unsafe = true
           diagnostics.push({
             severity: 'warning',
-            message: `Column inter-material ${character}{...} is preserved only until the table structure is edited.`,
+            message: `Column inter-material ${character}{...} is not supported and will be removed.`,
           })
         }
         index = argument.end - 1
@@ -154,26 +181,46 @@ export const parseColumnSpecification = (
             ? { mode: 'fixed', value: Number(match[1]), unit: match[2] }
             : { mode: 'auto' }
         )
+        if (match) columns.at(-1)!.alignmentExplicit = true
         if (!match) unsafe = true
         index = width.end - 1
         continue
       }
-      if (character === 'S' || character === 'D' || /[A-Z]/.test(character)) {
-        addColumn('center')
+      if (/[A-Z]/.test(character)) {
+        const customAlignment =
+          character === 'L' ? 'left' : character === 'R' ? 'right' : 'center'
+        let customWidth: TableColumn['width'] = { mode: 'auto' }
+        let argumentCount = character === 'D' ? 3 : Number.POSITIVE_INFINITY
+        while (argumentCount > 0) {
+          let cursor = index + 1
+          while (/\s/.test(source[cursor] ?? '')) cursor++
+          const opening = source[cursor]
+          if (opening !== '{' && opening !== '[') break
+          const argument = readDelimitedGroup(source, cursor, opening)
+          if ('LCR'.includes(character) && opening === '{') {
+            const width = argument.value
+              .trim()
+              .match(/^([0-9]*\.?[0-9]+)\s*([a-zA-Z]+)$/)
+            if (width) {
+              customWidth = {
+                mode: 'fixed',
+                value: Number(width[1]),
+                unit: width[2],
+              }
+            }
+          }
+          index = argument.end - 1
+          argumentCount--
+        }
+        addColumn(customAlignment, customWidth)
+        if (customWidth.mode === 'fixed') {
+          columns.at(-1)!.alignmentExplicit = true
+        }
         unsafe = true
         diagnostics.push({
           severity: 'warning',
-          message: `Column type ${character} is approximated as a centered column.`,
+          message: `Column type ${character} is approximated using a supported column definition.`,
         })
-        if (character === 'D') {
-          for (let argumentIndex = 0; argumentIndex < 3; argumentIndex++) {
-            while (/\s/.test(source[index + 1] ?? '')) index++
-            if (source[index + 1] === '{') {
-              const argument = readGroup(source, index + 1)
-              index = argument.end - 1
-            }
-          }
-        }
         continue
       }
       throw new Error(`Unsupported column type: ${character}`)
@@ -182,5 +229,14 @@ export const parseColumnSpecification = (
 
   parseRange(specification)
   if (!columns.length) throw new Error('No supported columns found')
-  return { columns, verticalBoundaries, diagnostics, unsafe }
+  const normalizedBoundaries = Array.from(
+    { length: columns.length + 1 },
+    (_, index) => verticalBoundaries[index] ?? 'none'
+  )
+  return {
+    columns,
+    verticalBoundaries: normalizedBoundaries,
+    diagnostics,
+    unsafe,
+  }
 }

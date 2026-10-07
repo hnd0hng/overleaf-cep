@@ -37,14 +37,7 @@ export const collectMetadataSpans = (
         const nestedAfterGrid =
           gridIndex >= 0 && gridIndex < environmentStack.length - 1
         const allowedDepth =
-          groupDepth === 0 &&
-          gridDepth <= 1 &&
-          !nestedAfterGrid &&
-          environmentStack.every(
-            environment =>
-              isTableEnvironment(environment) ||
-              isTableWrapperEnvironment(environment)
-          )
+          groupDepth === 0 && gridDepth <= 1 && !nestedAfterGrid
         if (allowedDepth) {
           const kind = node.name as 'caption' | 'label'
           const rawValue = argumentSource(source, node)

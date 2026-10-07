@@ -1,4 +1,4 @@
-export type ArgumentKind = 'mandatory' | 'optional'
+export type ArgumentKind = 'mandatory' | 'optional' | 'parenthesized'
 
 const signatures: Record<string, ArgumentKind[]> = {
   multicolumn: ['mandatory', 'mandatory', 'mandatory'],
@@ -32,7 +32,7 @@ const signatures: Record<string, ArgumentKind[]> = {
   midrule: ['optional'],
   bottomrule: ['optional'],
   cline: ['mandatory'],
-  cmidrule: ['optional', 'mandatory'],
+  cmidrule: ['optional', 'parenthesized', 'mandatory'],
   hhline: ['mandatory'],
   cdashline: ['mandatory'],
   specialrule: ['mandatory', 'mandatory', 'mandatory'],

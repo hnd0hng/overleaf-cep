@@ -45,8 +45,7 @@ describe('Visual Table Editor nested cell tables', function () {
     const edited = updateCellText(parsed.model, { row: 0, column: 1 }, 'After')
     const generated = generateLatex(edited).latex
 
-    expect(generated).to.contain('\\shortstack[c]{First \\\\ Second}')
-    expect(generated).not.to.contain('\\begin{tabular}[c]{@{}c@{}}')
+    expect(generated).to.contain('\\begin{tabular}[c]{@{}c@{}}')
   })
 
   it('imports safe escaped characters and escapes them again after an edit', function () {
@@ -60,9 +59,9 @@ describe('Visual Table Editor nested cell tables', function () {
 
     const edited = updateCellText(parsed.model, { row: 0, column: 1 }, 'After')
     const generated = generateLatex(edited).latex
-    expect(generated).to.contain(
-      '\\shortstack[c]{Alpha \\& Beta \\\\ Gamma \\%}'
-    )
+    expect(generated).to.contain('\\begin{tabular}[c]{@{}c@{}}')
+    expect(generated).to.contain('Alpha \\& Beta')
+    expect(generated).to.contain('Gamma \\%')
   })
 
   it('continues to display citations and math as raw LaTeX', function () {

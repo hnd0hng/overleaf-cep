@@ -8,28 +8,20 @@ import {
   TableColumn,
   TableEnvironment,
   TableModel,
-  LatexLongtableSectionLayout,
 } from './types'
 import { assertModel, cellAt, getCells } from './model'
 import { parseColumnSpecification } from './latex/column-spec'
-import { environmentNeedsWidth, isTableEnvironment } from './latex/environment'
-import { analyzeBoundaryRules } from './latex/generator/boundary-analyzer'
-import { collectSourcePackages } from './latex/generator/package-analyzer'
-import { renderImportedTable } from './latex/generator/source-layout-renderer'
+import { isTableEnvironment } from './latex/environment'
+import {
+  generateCanonicalLatex,
+  type GenerationResult,
+} from './latex/generator/canonical-renderer'
 import { buildLatexGrid } from './latex/grid-builder'
 import { parseLatexFragment, parseLatexSyntax } from './latex/parser'
 import { unwrapNestedCellTable } from './latex/nested-cell-table'
 import type { LatexNode } from './latex/syntax-tree'
 import { readTablePreamble, parseTableBody } from './latex/import-structure'
-import {
-  collectMetadataSpans,
-  detectWrapper,
-  templateSourceRange,
-} from './latex/source-layout'
-import {
-  attachLatexOrigin,
-  unchangedLatexSource,
-} from './latex/source-preservation'
+import { collectMetadataSpans, detectWrapper } from './latex/source-layout'
 
 const SPECIAL_CHARACTERS: Record<string, string> = {
   '&': '\\&',
@@ -49,232 +41,10 @@ export const escapeLatex = (value: string) =>
     .map(character => SPECIAL_CHARACTERS[character] ?? character)
     .join('')
 
-const alignmentLetter = (alignment: HorizontalAlignment) =>
-  alignment === 'left' ? 'l' : alignment === 'right' ? 'r' : 'c'
+export type { GenerationResult }
 
-const generateColumn = (column: TableColumn) => {
-  const alignment = alignmentLetter(column.alignment)
-  if (column.width.mode === 'flex') return 'X'
-  if (column.width.mode === 'fixed') {
-    const vertical =
-      column.verticalAlignment === 'middle'
-        ? 'm'
-        : column.verticalAlignment === 'bottom'
-          ? 'b'
-          : 'p'
-    const alignCommand =
-      alignment === 'l'
-        ? '\\raggedright'
-        : alignment === 'r'
-          ? '\\raggedleft'
-          : '\\centering'
-    return `>{${alignCommand}\\arraybackslash}${vertical}{${column.width.value}${column.width.unit}}`
-  }
-  return alignment
-}
-
-const renderMultiline = (
-  text: string,
-  fixedWidth: boolean,
-  alignment: string
-) => {
-  const lines = text.split(/\r?\n/).map(escapeLatex)
-  if (lines.length === 1) return lines[0]
-  if (fixedWidth) return lines.join('\\newline ')
-  return `\\shortstack[${alignment}]{${lines.join(' \\\\ ')}}`
-}
-
-const renderCellContent = (
-  cell: TableCell,
-  column: TableColumn,
-  packages: Set<string>,
-  includeVerticalBorders: boolean
-) => {
-  const alignment = alignmentLetter(
-    cell.horizontalAlignment ?? column.alignment
-  )
-  let value =
-    cell.content.rawLatex ??
-    renderMultiline(cell.content.text, column.width.mode === 'fixed', alignment)
-  if (cell.content.style?.bold) value = `\\textbf{${value}}`
-  if (cell.content.style?.italic) value = `\\textit{${value}}`
-  if (cell.content.style?.color) {
-    if (!packages.has('xcolor[table]')) packages.add('xcolor')
-    value = `\\textcolor{${cell.content.style.color}}{${value}}`
-  }
-  if (cell.backgroundColor) {
-    packages.delete('xcolor')
-    packages.add('xcolor[table]')
-    value = `\\cellcolor{${cell.backgroundColor}}${value}`
-  }
-  if (cell.rowSpan > 1) {
-    packages.add('multirow')
-    value = `\\multirow{${cell.rowSpan}}{*}{${value}}`
-  }
-  const hasLeftBorder = includeVerticalBorders && cell.borders.left !== 'none'
-  const hasRightBorder = includeVerticalBorders && cell.borders.right !== 'none'
-  const verticalSpecification = `${hasLeftBorder ? '|' : ''}${alignment}${hasRightBorder ? '|' : ''}`
-  if (
-    cell.columnSpan > 1 ||
-    cell.horizontalAlignment ||
-    hasLeftBorder ||
-    hasRightBorder
-  ) {
-    value = `\\multicolumn{${cell.columnSpan}}{${verticalSpecification}}{${value}}`
-  }
-  return value
-}
-
-export type GenerationResult = {
-  latex: string
-  packages: string[]
-  warnings: Diagnostic[]
-}
-
-export const generateLatex = (model: TableModel): GenerationResult => {
-  assertModel(model)
-  const preservedSource = unchangedLatexSource(model)
-  const packages = new Set<string>()
-  collectSourcePackages(preservedSource, packages)
-  const warnings: Diagnostic[] = []
-  const renderBoundaryRule = analyzeBoundaryRules(model)
-  const columnSpec = model.columns.map(generateColumn).join('')
-  if (model.columns.some(column => column.width.mode === 'fixed')) {
-    packages.add('array')
-  }
-  if (model.options.style === 'booktabs') packages.add('booktabs')
-  if (model.options.environment === 'tabularx') packages.add('tabularx')
-  if (model.options.environment === 'xltabular') packages.add('xltabular')
-  if (model.options.environment === 'longtable') packages.add('longtable')
-  if (model.latexOrigin?.wrapper.startsWith('sidewaystable')) {
-    packages.add('rotating')
-  }
-
-  const rowLines: string[] = []
-  for (let row = 0; row < model.rows.length; row++) {
-    const boundaryRule = renderBoundaryRule(row)
-    let latex = boundaryRule ? `${boundaryRule}\n` : ''
-    const values: string[] = []
-    for (let column = 0; column < model.columns.length; ) {
-      const cell = cellAt(model, row, column)!
-      if (cell.row < row) {
-        values.push('')
-        column++
-      } else {
-        values.push(
-          renderCellContent(
-            cell,
-            model.columns[column],
-            packages,
-            model.options.style !== 'booktabs'
-          )
-        )
-        column += cell.columnSpan
-      }
-    }
-    latex += `  ${values.join(' & ')} \\\\`
-    rowLines.push(latex)
-  }
-  const trailingRule = renderBoundaryRule(model.rows.length)
-  const trailingRules = trailingRule ? [trailingRule] : []
-
-  const environment = model.options.environment
-  const position = model.options.environmentPosition
-    ? `[${model.options.environmentPosition}]`
-    : ''
-  const begin = environmentNeedsWidth(environment)
-    ? `\\begin{${environment}}{${model.options.targetWidth}}${environment === 'tabular*' ? position : ''}{${columnSpec}}`
-    : `\\begin{${environment}}${position}{${columnSpec}}`
-
-  const importedLatex = renderImportedTable(
-    model,
-    begin,
-    rowLines,
-    trailingRules,
-    escapeLatex
-  )
-  if (importedLatex) {
-    return {
-      latex: preservedSource ?? importedLatex,
-      packages: [...packages],
-      warnings,
-    }
-  }
-
-  if (environment === 'longtable') {
-    const prefix = [
-      model.options.caption
-        ? `\\caption{${escapeLatex(model.options.caption)}}${model.options.label ? `\\label{${escapeLatex(model.options.label)}}` : ''} \\\\`
-        : model.options.label
-          ? `\\label{${escapeLatex(model.options.label)}}`
-          : '',
-    ].filter(Boolean)
-    const repeatCount = model.rows.findLastIndex(row => row.repeatOnNewPage) + 1
-    const body: string[] = [begin, ...prefix]
-    if (repeatCount > 0) {
-      warnings.push({
-        severity: 'warning',
-        message:
-          'Repeating longtable headers are generated from the leading marked rows.',
-      })
-      const header = rowLines.slice(0, repeatCount)
-      body.push(
-        ...header,
-        '\\endfirsthead',
-        ...header,
-        '\\endhead',
-        ...rowLines.slice(repeatCount)
-      )
-    } else {
-      body.push(...rowLines)
-    }
-    body.push(...trailingRules, `\\end{${environment}}`)
-    if (model.options.scale !== 'none') {
-      warnings.push({
-        severity: 'warning',
-        message:
-          'Longtable cannot be safely wrapped in resizebox; scaling was ignored.',
-      })
-    }
-    return {
-      latex: preservedSource ?? body.join('\n'),
-      packages: [...packages],
-      warnings,
-    }
-  }
-
-  let inner = `${begin}\n${[...rowLines, ...trailingRules].join('\n')}\n\\end{${environment}}`
-  if (model.options.scale !== 'none') {
-    packages.add('graphicx')
-    const width =
-      model.options.scale === 'textwidth' ? '\\textwidth' : '\\columnwidth'
-    inner = `\\resizebox{${width}}{!}{%\n${inner}\n}`
-  }
-
-  if (model.latexOrigin?.wrapper === 'standalone') {
-    return {
-      latex: preservedSource ?? inner,
-      packages: [...packages],
-      warnings,
-    }
-  }
-
-  const wrapper = [
-    `\\begin{table}${model.options.placement ? `[${model.options.placement}]` : ''}`,
-  ]
-  if (model.options.centered) wrapper.push('  \\centering')
-  wrapper.push(...inner.split('\n').map(line => `  ${line}`))
-  if (model.options.caption)
-    wrapper.push(`  \\caption{${escapeLatex(model.options.caption)}}`)
-  if (model.options.label)
-    wrapper.push(`  \\label{${escapeLatex(model.options.label)}}`)
-  wrapper.push('\\end{table}')
-  return {
-    latex: preservedSource ?? wrapper.join('\n'),
-    packages: [...packages],
-    warnings,
-  }
-}
+export const generateLatex = (model: TableModel): GenerationResult =>
+  generateCanonicalLatex(model, escapeLatex)
 
 const readBalanced = (
   source: string,
@@ -489,7 +259,9 @@ const unwrapMultirow = (value: string) => {
 
 const unwrapMultiline = (value: string) => {
   const trimmed = value.trim()
-  const command = trimmed.startsWith('\\shortstack')
+  const command: 'shortstack' | 'makecell' | undefined = trimmed.startsWith(
+    '\\shortstack'
+  )
     ? 'shortstack'
     : trimmed.startsWith('\\makecell')
       ? 'makecell'
@@ -497,22 +269,31 @@ const unwrapMultiline = (value: string) => {
   if (!command) return
   const prefix = `\\${command}`
   let cursor = prefix.length
+  let alignment: HorizontalAlignment | undefined
   if (trimmed[cursor] === '[') {
-    const closing = trimmed.indexOf(']', cursor + 1)
-    if (closing < 0) return
-    cursor = closing + 1
+    const option = readBalanced(trimmed, cursor, '[', ']')
+    const alignmentToken = option.value.trim().match(/[lcr]/)?.[0]
+    alignment =
+      alignmentToken === 'l'
+        ? 'left'
+        : alignmentToken === 'r'
+          ? 'right'
+          : alignmentToken === 'c'
+            ? 'center'
+            : undefined
+    cursor = option.end
   }
   if (trimmed[cursor] !== '{') return
   const argument = readBalanced(trimmed, cursor)
   if (trimmed.slice(argument.end).trim()) return
-  return argument.value
+  return { content: argument.value, alignment, command }
 }
 
 const decodeLatexText = (value: string) => {
   const supportedEscape =
     /\\(?:[&%$#_{}]|textasciitilde\{\}|textasciicircum\{\}|textbackslash\{\})/g
   const unsupported = value.replace(supportedEscape, '')
-  if (/\\[a-zA-Z]+|[{}$]/.test(unsupported)) return
+  if (/\\.|[{}$]/.test(unsupported)) return
   return value
     .replace(/\\textasciitilde\{\}/g, '~')
     .replace(/\\textasciicircum\{\}/g, '^')
@@ -541,8 +322,10 @@ const parseCell = (source: string, row: number, column: number): TableCell => {
     if (multiColumn?.length === 3) {
       cell.columnSpan = Number(multiColumn[0])
       const multiColumnSpec = multiColumn[1].trim()
-      if (multiColumnSpec.startsWith('|')) cell.borders.left = 'solid'
-      if (multiColumnSpec.endsWith('|')) cell.borders.right = 'solid'
+      if (multiColumnSpec.startsWith('||')) cell.borders.left = 'double'
+      else if (multiColumnSpec.startsWith('|')) cell.borders.left = 'solid'
+      if (multiColumnSpec.endsWith('||')) cell.borders.right = 'double'
+      else if (multiColumnSpec.endsWith('|')) cell.borders.right = 'solid'
       const alignment = multiColumnSpec.match(/[lcr]/)?.[0]
       if (alignment) {
         cell.horizontalAlignment =
@@ -593,17 +376,23 @@ const parseCell = (source: string, row: number, column: number): TableCell => {
       if (lines.every((line): line is string => line !== undefined)) {
         value = lines.join('\n')
         cell.horizontalAlignment ??= nestedTable.alignment
+        cell.latexPresentation = { multiline: 'nested-tabular' }
         unwrapped = true
         continue
       }
     }
-    const shortstack = unwrapMultiline(value)
-    if (shortstack !== undefined) {
-      const lines = splitTopLevel(shortstack, '\\\\').map(line =>
+    const multiline = unwrapMultiline(value)
+    if (multiline !== undefined) {
+      const lines = splitTopLevel(multiline.content, '\\\\').map(line =>
         decodeLatexText(line.trim())
       )
       if (lines.every((line): line is string => line !== undefined)) {
         value = lines.join('\n')
+        cell.horizontalAlignment ??= multiline.alignment
+        cell.latexPresentation = {
+          multiline: multiline.command,
+          alignment: multiline.alignment,
+        }
         unwrapped = true
       }
     }
@@ -667,6 +456,128 @@ export const locateTableEnvironment = (
   return roots[0]
 }
 
+const collectTableDirectives = (
+  source: string,
+  location: TableEnvironmentLocation,
+  metadata: ReturnType<typeof collectMetadataSpans>,
+  bodyStart: number,
+  body: string
+) => {
+  const candidates: Array<{
+    index: number
+    end: number
+    kind:
+      | 'centering'
+      | 'caption'
+      | 'label'
+      | 'tabcolsep'
+      | 'arraystretch'
+      | 'font-size'
+      | 'rowcolors'
+    value?: string
+    arguments?: string[]
+    scoped?: boolean
+  }> = metadata
+    .filter(command => command.primary)
+    .map(command => ({
+      index: command.from,
+      end: command.to,
+      kind: command.kind,
+    }))
+
+  const outsideGrid = (index: number) =>
+    index < location.beginStart || index >= location.endEnd
+  const collect = (
+    pattern: RegExp,
+    kind: 'centering' | 'tabcolsep' | 'arraystretch' | 'font-size',
+    value?: (match: RegExpMatchArray) => string | undefined
+  ) => {
+    for (const match of source.matchAll(pattern)) {
+      if (match.index === undefined || !outsideGrid(match.index)) continue
+      candidates.push({
+        index: match.index,
+        end: match.index + match[0].length,
+        kind,
+        value: value?.(match),
+        scoped:
+          (kind === 'tabcolsep' || kind === 'arraystretch') &&
+          source.slice(0, match.index).trimEnd().endsWith('{'),
+      })
+    }
+  }
+  collect(/\\centering\b/g, 'centering')
+  collect(
+    /\\setlength\s*\{\s*\\tabcolsep\s*\}\s*\{([^{}]+)\}/g,
+    'tabcolsep',
+    match => match[1].trim()
+  )
+  collect(
+    /\\renewcommand\s*\{\s*\\arraystretch\s*\}\s*\{([^{}]+)\}/g,
+    'arraystretch',
+    match => match[1].trim()
+  )
+  collect(
+    /\\(tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge)\b/g,
+    'font-size',
+    match => match[1]
+  )
+  for (const match of source.matchAll(
+    /\\rowcolors\s*\{([^{}]+)\}\s*\{([^{}]+)\}\s*\{([^{}]+)\}/g
+  )) {
+    if (match.index === undefined || !outsideGrid(match.index)) continue
+    candidates.push({
+      index: match.index,
+      end: match.index + match[0].length,
+      kind: 'rowcolors',
+      arguments: [match[1].trim(), match[2].trim(), match[3].trim()],
+    })
+  }
+
+  const rowSeparators = parseLatexFragment(body).filter(
+    node => node.kind === 'separator' && node.separator === 'row'
+  )
+  const lastRowEnd = bodyStart + (rowSeparators.at(-1)?.to ?? body.length)
+  const hasTableContentAfter = (candidate: (typeof candidates)[number]) => {
+    const end = location.endStart
+    const excluded = metadata
+      .filter(command => command.from >= candidate.end && command.from < end)
+      .sort((left, right) => left.from - right.from)
+    let cursor = candidate.end
+    let remainder = ''
+    for (const command of excluded) {
+      remainder += source.slice(cursor, command.from)
+      cursor = command.to
+    }
+    remainder += source.slice(cursor, end)
+    return Boolean(
+      remainder
+        .replace(/%[^\n]*/g, '')
+        .replace(/\\\\(?:\[[^\]]*\])?/g, '')
+        .replace(/\\(?:endfirsthead|endhead|endfoot|endlastfoot)\b/g, '')
+        .replace(/\\(?:hline|toprule|midrule|bottomrule)\b/g, '')
+        .replace(/\\(?:cline|cmidrule)(?:\([^)]*\))?\s*\{\d+\s*-\s*\d+\}/g, '')
+        .trim()
+    )
+  }
+  return candidates
+    .sort((left, right) => left.index - right.index)
+    .map((candidate, order) => ({
+      kind: candidate.kind,
+      value: candidate.value,
+      arguments: candidate.arguments,
+      scoped: candidate.scoped,
+      position:
+        candidate.index < location.beginStart ||
+        (candidate.index >= location.beginStart &&
+          (location.environment === 'longtable'
+            ? hasTableContentAfter(candidate)
+            : candidate.index < lastRowEnd))
+          ? ('before-grid' as const)
+          : ('after-grid' as const),
+      order,
+    }))
+}
+
 export const parseLatexTable = (
   source: string,
   allowUnsafe = false
@@ -691,11 +602,27 @@ export const parseLatexTable = (
     diagnostics.push({ severity: 'warning', message })
   }
   const unsafeCommands = preamble.body.match(
-    /\\(cmidrule|specialrule|addlinespace|rowcolor|hhline)\b/g
+    /\\(specialrule|addlinespace|hhline)\b/g
   )
+  const trimmedCmidrules = preamble.body.match(/\\cmidrule\s*\(/g)
   const wrapperSource =
     source.slice(0, location.beginStart) + source.slice(location.endEnd)
-  const unsafeWrapperCommands = wrapperSource.match(/\\setlength\b/g)
+  const unsupportedWrapperSource = wrapperSource
+    .replace(/\\setlength\s*\{\s*\\tabcolsep\s*\}\s*\{[^{}]+\}/g, '')
+    .replace(/\\renewcommand\s*\{\s*\\arraystretch\s*\}\s*\{[^{}]+\}/g, '')
+  const unsafeWrapperCommands = unsupportedWrapperSource.match(
+    /\\(?:setlength|renewcommand)\b/g
+  )
+  const unsafeOuterStructures = wrapperSource.match(
+    /\\begin\{(?:threeparttable|tablenotes|landscape|center|adjustbox|minipage)\}|\\(?:rotatebox|scalebox)\b/g
+  )
+  if (trimmedCmidrules) {
+    diagnostics.push({
+      severity: 'warning',
+      message:
+        'Trim options on \\cmidrule are not supported and will be removed.',
+    })
+  }
   if (unsafeCommands) {
     diagnostics.push({
       severity: 'warning',
@@ -712,6 +639,14 @@ export const parseLatexTable = (
       ].join(', ')}`,
     })
   }
+  if (unsafeOuterStructures) {
+    diagnostics.push({
+      severity: 'warning',
+      message: `Unsupported outer table structure will be removed: ${[
+        ...new Set(unsafeOuterStructures),
+      ].join(', ')}`,
+    })
+  }
   if (looseRowSeparators.replacements) {
     diagnostics.push({
       severity: 'warning',
@@ -720,7 +655,9 @@ export const parseLatexTable = (
   }
   let unsafe = Boolean(
     unsafeWrapperCommands ||
+    unsafeOuterStructures ||
     unsafeCommands ||
+    trimmedCmidrules ||
     parsedBody.diagnostics.length ||
     looseRowSeparators.replacements ||
     columnResult.unsafe
@@ -728,35 +665,82 @@ export const parseLatexTable = (
   if (unsafe && !allowUnsafe) {
     return { model: createTableModel(), diagnostics, unsafe: true }
   }
-  const { rawRows, rowSections, rulesAtBoundary, sectionLayouts } = parsedBody
+  const { rawRows, rowSections, rowColors, rulesAtBoundary, sectionLayouts } =
+    parsedBody
   const model = createTableModel(Math.max(1, rawRows.length), columns.length)
   model.columns = columns
+  model.columnBoundaries = verticalBoundaries
   model.cells = {}
   model.options.environment = environment
   model.options.targetWidth = preamble.targetWidth
   model.options.environmentPosition = preamble.environmentPosition
+  model.options.longtableMarkers =
+    environment === 'longtable'
+      ? sectionLayouts
+          .map(section => section.marker)
+          .filter((marker): marker is string => Boolean(marker))
+      : undefined
   for (let index = 0; index < model.rows.length; index++) {
     model.rows[index].longtableSection =
       rowSections[index] ?? (environment === 'longtable' ? 'body' : undefined)
+    model.rows[index].backgroundColor = rowColors[index]
     if (environment === 'longtable') {
       model.rows[index].repeatOnNewPage =
         rowSections[index] === 'firstHead' || rowSections[index] === 'head'
     }
   }
-  model.options.style = /\\(toprule|midrule|bottomrule)/.test(source)
+  if (environment === 'longtable') {
+    const supportedRules = (template: string) =>
+      template.match(
+        /\\(?:hline|toprule|midrule|bottomrule|(?:cline|cmidrule)(?:\([^)]*\))?\s*\{\d+\s*-\s*\d+\})/g
+      ) ?? []
+    model.options.longtableSectionRules = {}
+    for (const section of sectionLayouts) {
+      const rowIndexes = model.rows
+        .map((row, index) => ({ row, index }))
+        .filter(item => (item.row.longtableSection ?? 'body') === section.kind)
+        .map(item => item.index)
+      const firstRowIndex = rowIndexes.at(0)
+      model.options.longtableSectionRules[section.kind] = {
+        prefix:
+          firstRowIndex === undefined
+            ? []
+            : section.pending
+                .filter(fragment => fragment.beforeRowIndex === firstRowIndex)
+                .flatMap(fragment => supportedRules(fragment.template)),
+        suffix: section.pending
+          .filter(fragment => fragment.beforeRowIndex === undefined)
+          .flatMap(fragment => supportedRules(fragment.template)),
+      }
+    }
+  }
+  model.options.style = /\\(toprule|midrule|bottomrule|cmidrule)/.test(source)
     ? 'booktabs'
     : 'default'
-  model.options.centered = /\\centering\b/.test(source)
   const wrapperName = detectWrapper(source, location.beginStart)
+  model.options.wrapper = wrapperName
+  model.options.directives = collectTableDirectives(
+    source,
+    location,
+    metadataSpans,
+    preamble.bodyStart,
+    preamble.body
+  )
+  model.options.centered = model.options.directives.some(
+    directive => directive.kind === 'centering'
+  )
   const wrapper = source
     .slice(0, location.beginStart)
     .match(/\\begin\{(?:table\*?|sidewaystable\*?)\}(?:\[([^\]]*)\])?/)
-  if (wrapper?.[1] !== undefined) {
-    model.options.placement = wrapper[1]
-  }
-  model.options.caption =
-    metadataSpans.find(command => command.kind === 'caption' && command.primary)
-      ?.value ?? ''
+  model.options.placement =
+    wrapperName === 'standalone' ? '' : (wrapper?.[1] ?? '')
+  const primaryCaption = metadataSpans.find(
+    command => command.kind === 'caption' && command.primary
+  )
+  model.options.caption = primaryCaption?.value ?? ''
+  model.options.captionIsLatex =
+    primaryCaption !== undefined &&
+    decodeLatexText(primaryCaption.value) === undefined
   model.options.label =
     metadataSpans.find(command => command.kind === 'label' && command.primary)
       ?.value ?? ''
@@ -797,8 +781,8 @@ export const parseLatexTable = (
   }
   for (const cell of getCells(model)) {
     if (cell.columnSpan === 1) {
-      if (verticalBoundaries.has(cell.column)) cell.borders.left = 'solid'
-      if (verticalBoundaries.has(cell.column + 1)) cell.borders.right = 'solid'
+      cell.borders.left = verticalBoundaries[cell.column] ?? 'none'
+      cell.borders.right = verticalBoundaries[cell.column + 1] ?? 'none'
       if (cell.horizontalAlignment === model.columns[cell.column].alignment) {
         cell.horizontalAlignment = undefined
       }
@@ -818,45 +802,9 @@ export const parseLatexTable = (
       }
     }
   }
-  const longtableLayouts: LatexLongtableSectionLayout[] | undefined =
-    environment === 'longtable'
-      ? sectionLayouts.map(section => ({
-          kind: section.kind,
-          marker: section.marker,
-          prefixTemplate: section.prefixTemplate,
-          suffixTemplate: section.suffixTemplate,
-          fragments: section.pending.map(fragment => ({
-            beforeRowId:
-              fragment.beforeRowIndex === undefined
-                ? undefined
-                : model.rows[fragment.beforeRowIndex]?.id,
-            template: fragment.template,
-          })),
-        }))
-      : undefined
   model.unsafeImport = unsafe
   model.diagnostics = diagnostics
   assertModel(model)
-  attachLatexOrigin(model, source, wrapperName, {
-    wrapper: wrapperName,
-    beforeGridTemplate: templateSourceRange(
-      source,
-      0,
-      location.beginStart,
-      metadataSpans
-    ),
-    afterGridTemplate: templateSourceRange(
-      source,
-      location.endEnd,
-      source.length,
-      metadataSpans
-    ),
-    metadata: metadataSpans.map(
-      ({ from: _from, to: _to, ...command }) => command
-    ),
-    gridEnvironment: environment,
-    sections: longtableLayouts,
-  })
   return { model, diagnostics, unsafe }
 }
 

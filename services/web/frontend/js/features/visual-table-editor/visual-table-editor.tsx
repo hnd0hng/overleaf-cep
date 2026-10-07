@@ -1178,7 +1178,16 @@ export default function VisualTableEditor({
                 <OLFormControl
                   size="sm"
                   value={model.options.caption}
-                  onChange={event => setOption('caption', event.target.value)}
+                  onChange={event =>
+                    apply(current => ({
+                      ...current,
+                      options: {
+                        ...current.options,
+                        caption: event.target.value,
+                        captionIsLatex: false,
+                      },
+                    }))
+                  }
                 />
               </label>
               <label>

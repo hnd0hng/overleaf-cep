@@ -1,4 +1,5 @@
 import type { TableModel } from '../../types'
+import { latexStructureFingerprint } from '../source-preservation'
 import { renderSourceTemplate } from '../source-layout'
 
 const insertBeforeWrapperEnd = (
@@ -23,6 +24,8 @@ export const renderImportedTable = (
   if (!layout) return undefined
   const render = (template: string) =>
     renderSourceTemplate(template, layout.metadata, model, escapeLatex)
+  const preserveStructure =
+    layout.structureFingerprint === latexStructureFingerprint(model)
 
   if (model.options.environment === 'longtable' && layout.sections) {
     const output = [begin]
@@ -33,14 +36,18 @@ export const renderImportedTable = (
         .map((row, index) => ({ row, index }))
         .filter(item => (item.row.longtableSection ?? 'body') === section.kind)
       for (const { row, index } of rows) {
-        for (const fragment of section.fragments ?? []) {
+        for (const fragment of (section.fragments ?? []).filter(
+          fragment => preserveStructure || !fragment.structural
+        )) {
           if (fragment.beforeRowId === row.id)
             output.push(render(fragment.template))
         }
         output.push(rowLines[index])
         renderedRows.add(row.id)
       }
-      for (const fragment of section.fragments ?? []) {
+      for (const fragment of (section.fragments ?? []).filter(
+        fragment => preserveStructure || !fragment.structural
+      )) {
         if (!fragment.beforeRowId) output.push(render(fragment.template))
       }
       output.push(render(section.suffixTemplate))
@@ -77,7 +84,23 @@ export const renderImportedTable = (
     )}`
   }
 
-  const grid = `${begin}\n${[...rowLines, ...trailingRules].join(
+  const renderedRows: string[] = []
+  for (const [index, row] of model.rows.entries()) {
+    for (const fragment of (layout.fragments ?? []).filter(
+      fragment => preserveStructure || !fragment.structural
+    )) {
+      if (fragment.beforeRowId === row.id) {
+        renderedRows.push(render(fragment.template))
+      }
+    }
+    renderedRows.push(rowLines[index])
+  }
+  for (const fragment of (layout.fragments ?? []).filter(
+    fragment => preserveStructure || !fragment.structural
+  )) {
+    if (!fragment.beforeRowId) renderedRows.push(render(fragment.template))
+  }
+  const grid = `${begin}\n${[...renderedRows, ...trailingRules].join(
     '\n'
   )}\n\\end{${model.options.environment}}`
   const before = render(layout.beforeGridTemplate)

@@ -1,4 +1,5 @@
 import {
+  applyBorders,
   assertModel,
   cellAt,
   deleteColumns,
@@ -127,6 +128,11 @@ describe('Visual Table Editor core', function () {
       from: { row: 1, column: 0 },
       to: { row: 1, column: 1 },
     })
+    model = applyBorders(
+      model,
+      { from: { row: 0, column: 0 }, to: { row: 1, column: 1 } },
+      'none'
+    )
     model.options.style = 'booktabs'
     const first = generateLatex(model)
     expect(generateLatex(model)).to.deep.equal(first)
@@ -182,15 +188,16 @@ describe('Visual Table Editor core', function () {
     expect(result.unsafe).to.equal(false)
     expect(result.model.rows).to.have.length(2)
     expect(result.model.columns).to.have.length(2)
-    expect(cellAt(result.model, 0, 0)?.content.rawLatex).to.contain(
-      '\\begin{tabular}'
-    )
+    expect(cellAt(result.model, 0, 0)?.content).to.deep.include({
+      text: 'Inner\nHeading',
+      style: { bold: true },
+    })
     expect(cellAt(result.model, 1, 1)?.content.text).to.equal('4')
   })
 
   it('warns before unsafe import and preserves opaque cell LaTeX', function () {
     const unsafe = parseLatexTable(String.raw`\begin{tabular}{cc}
-A & B \\ \cmidrule{1-2}
+A & B \\ \specialrule{1pt}{0pt}{0pt}
 C & D \\
 \end{tabular}`)
     expect(unsafe.unsafe).to.equal(true)
@@ -224,7 +231,10 @@ C & D \\
       top: 'solid',
       bottom: 'solid',
     })
-    expect(generateLatex(parsed.model).latex).to.equal(source)
+    const canonical = generateLatex(parsed.model).latex
+    expect(canonical).to.contain('\\begin{tabular}{|c|c|}')
+    expect(canonical).to.contain('\\cline{1-1}')
+    expect(parseLatexTable(canonical).unsafe).to.equal(false)
     const edited = updateCellText(
       parsed.model,
       { row: 0, column: 0 },
@@ -233,7 +243,9 @@ C & D \\
     const generated = generateLatex(edited).latex
     expect(generated).to.contain('\\hline')
     expect(generated).to.contain('\\cline{1-1}')
-    expect(generated).to.contain('\\multicolumn{1}{|c|}{Changed}')
+    expect(generated).to.contain('\\begin{tabular}{|c|c|}')
+    expect(generated).to.contain('Changed & B')
+    expect(generated).not.to.contain('\\multicolumn{1}')
   })
 
   it('does not duplicate repeated longtable header rows in the body', function () {

@@ -148,6 +148,7 @@ const withoutMetadata = (
 type PendingFragment = {
   beforeRowIndex?: number
   template: string
+  structural?: boolean
 }
 
 export const parseTableBody = (
@@ -159,6 +160,7 @@ export const parseTableBody = (
 ) => {
   const rawRows: string[] = []
   const rowSections: LongtableSection[] = []
+  const rowColors: Array<string | undefined> = []
   const rulesAtBoundary = new Map<number, Array<readonly [number, number]>>()
   const sectionLayouts: Array<
     LatexLongtableSectionLayout & { pending: PendingFragment[] }
@@ -192,10 +194,8 @@ export const parseTableBody = (
     for (const chunk of splitRows(section.source)) {
       const absoluteStart = bodyStart + section.from + chunk.from
       const extracted = withoutMetadata(chunk.source, absoluteStart, metadata)
-      const { content, rules } = extractRowStructure(
-        extracted.clean,
-        columnCount
-      )
+      const { content, rules, rowColor, structuralTemplate } =
+        extractRowStructure(extracted.clean, columnCount)
       const boundary = rawRows.length
       if (rules.length) {
         rulesAtBoundary.set(boundary, [
@@ -203,21 +203,27 @@ export const parseTableBody = (
           ...rules,
         ])
       }
-      const template = extracted.matches.map(command => command.token).join('')
+      const metadataTemplate = extracted.matches
+        .map(command => command.token)
+        .join('')
+      const addPending = (template: string, structural = false) => {
+        if (!template) return
+        layout.pending.push({
+          beforeRowIndex:
+            content.trim() || chunk.separator ? rawRows.length : undefined,
+          template: content.trim() ? template : `${template}${chunk.separator}`,
+          structural,
+        })
+      }
       if (content.trim()) {
-        if (template) {
-          layout.pending.push({
-            beforeRowIndex: rawRows.length,
-            template,
-          })
-        }
+        addPending(metadataTemplate)
+        addPending(structuralTemplate, true)
         rawRows.push(content)
         rowSections.push(section.kind)
-      } else if (template) {
-        layout.pending.push({
-          beforeRowIndex: chunk.separator ? rawRows.length : undefined,
-          template: `${template}${chunk.separator}`,
-        })
+        rowColors.push(rowColor)
+      } else {
+        addPending(metadataTemplate)
+        addPending(structuralTemplate, true)
       }
     }
     sectionLayouts.push(layout)
@@ -227,6 +233,7 @@ export const parseTableBody = (
     diagnostics: split.diagnostics,
     rawRows,
     rowSections,
+    rowColors,
     rulesAtBoundary,
     sectionLayouts,
   }

@@ -21,6 +21,7 @@ export type VerticalAlignment = 'top' | 'middle' | 'bottom'
 export type BorderStyle =
   | 'none'
   | 'solid'
+  | 'double'
   | 'booktabs-top'
   | 'booktabs-mid'
   | 'booktabs-bottom'
@@ -56,6 +57,10 @@ export type TableCell = {
   horizontalAlignment?: HorizontalAlignment
   verticalAlignment?: VerticalAlignment
   backgroundColor?: string
+  latexPresentation?: {
+    multiline: 'makecell' | 'shortstack' | 'nested-tabular'
+    alignment?: HorizontalAlignment
+  }
   borders: CellBorders
   numberFormat?: {
     precision?: number
@@ -67,29 +72,59 @@ export type TableCell = {
 export type TableColumn = {
   id: string
   alignment: HorizontalAlignment
+  /** Fixed-width columns only: false preserves native p/m/b justification. */
+  alignmentExplicit?: boolean
   verticalAlignment: VerticalAlignment
+  backgroundColor?: string
   width:
     | { mode: 'auto' }
     | { mode: 'fixed'; value: number; unit: string }
     | { mode: 'flex' }
 }
 
+export type TableDirective = {
+  kind:
+    | 'centering'
+    | 'caption'
+    | 'label'
+    | 'tabcolsep'
+    | 'arraystretch'
+    | 'font-size'
+    | 'rowcolors'
+  position: 'before-grid' | 'after-grid'
+  order: number
+  value?: string
+  arguments?: string[]
+  scoped?: boolean
+}
+
 export type TableRow = {
   id: string
   repeatOnNewPage?: boolean
   longtableSection?: LongtableSection
+  backgroundColor?: string
 }
 
 export type TableOptions = {
+  wrapper: TableWrapperEnvironment
   environment: TableEnvironment
   targetWidth: string
   style: 'default' | 'booktabs'
   caption: string
+  /** Imported captions containing LaTeX are emitted without text escaping. */
+  captionIsLatex?: boolean
   label: string
   centered: boolean
   scale: 'none' | 'textwidth' | 'columnwidth'
   placement: string
   environmentPosition?: string
+  directives?: TableDirective[]
+  /** Supported longtable section terminators, including empty sections. */
+  longtableMarkers?: string[]
+  /** Supported rules anchored to longtable section boundaries. */
+  longtableSectionRules?: Partial<
+    Record<LongtableSection, { prefix: string[]; suffix: string[] }>
+  >
 }
 
 export type LatexMetadataCommand = {
@@ -105,6 +140,7 @@ export type LatexMetadataCommand = {
 export type LatexAnchoredFragment = {
   beforeRowId?: string
   template: string
+  structural?: boolean
 }
 
 export type LatexLongtableSectionLayout = {
@@ -121,6 +157,9 @@ export type LatexSourceLayout = {
   afterGridTemplate: string
   metadata: LatexMetadataCommand[]
   gridEnvironment: TableEnvironment
+  columnSpecification?: string
+  structureFingerprint?: string
+  fragments?: LatexAnchoredFragment[]
   sections?: LatexLongtableSectionLayout[]
 }
 
@@ -128,10 +167,12 @@ export type TableModel = {
   schemaVersion: 1
   rows: TableRow[]
   columns: TableColumn[]
+  /** Vertical rules at the left edge, between columns, and at the right edge. */
+  columnBoundaries: BorderStyle[]
   cells: Record<string, TableCell>
   options: TableOptions
   unsafeImport?: boolean
-  /** Original LaTeX is retained only while the imported model is unchanged. */
+  /** Legacy draft compatibility only; canonical import/generation never reads or writes it. */
   latexOrigin?: {
     source: string
     wrapper: TableWrapperEnvironment
@@ -218,6 +259,7 @@ export const createTableModel = (rowCount = 3, columnCount = 3): TableModel => {
     columns,
     cells,
     options: {
+      wrapper: 'table',
       environment: 'tabular',
       targetWidth: '\\textwidth',
       style: 'default',
@@ -226,7 +268,12 @@ export const createTableModel = (rowCount = 3, columnCount = 3): TableModel => {
       centered: true,
       scale: 'none',
       placement: 'htbp',
+      directives: [{ kind: 'centering', position: 'before-grid', order: 0 }],
     },
+    columnBoundaries: Array.from(
+      { length: columnCount + 1 },
+      () => 'solid' as const
+    ),
     diagnostics: [],
   }
 }

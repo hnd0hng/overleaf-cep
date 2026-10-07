@@ -1,5 +1,7 @@
 import { detectDelimiter, parseDelimited } from './csv'
 import { locateTableEnvironment, parseLatexTable } from './latex'
+import { parseLatexSyntax } from './latex/parser'
+import { trimNodes } from './latex/syntax-tree'
 import { cellAt } from './model'
 import {
   createTableModel,
@@ -95,17 +97,18 @@ const validateCompleteLatexTable = (source: string) => {
 
   const location = locateTableEnvironment(normalized)
   const environment = location.environment
-  const isStandalone =
-    location.beginStart === 0 && location.endEnd === normalized.length
-  const wrapperMatch = normalized.match(
-    /^\\begin\{(table\*?|sidewaystable\*?)\}(?:\[[^\]]*\])?/
-  )
-  const isTableWrapper =
-    Boolean(wrapperMatch) && normalized.endsWith(`\\end{${wrapperMatch?.[1]}}`)
+  const roots = trimNodes(parseLatexSyntax(normalized).children)
+  const root = roots.length === 1 ? roots[0] : undefined
+  const isCompleteContainer =
+    root !== undefined &&
+    root.from === 0 &&
+    root.to === normalized.length &&
+    root.from <= location.beginStart &&
+    root.to >= location.endEnd
 
-  if (!isStandalone && !isTableWrapper) {
+  if (!isCompleteContainer) {
     throw new Error(
-      'Enter a complete tabular, tabular*, tabularx, xltabular, or longtable environment, optionally wrapped in table, table*, or sidewaystable.'
+      'Enter exactly one complete supported LaTeX table, optionally enclosed by balanced wrapper environments or commands.'
     )
   }
   return { normalized, environment }

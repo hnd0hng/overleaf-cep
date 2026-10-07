@@ -85,6 +85,41 @@ const fillHoles = (model: TableModel) => {
   }
 }
 
+const ensureColumnBoundaries = (model: TableModel) => {
+  if (model.columnBoundaries?.length === model.columns.length + 1) return
+  model.columnBoundaries = Array.from(
+    { length: model.columns.length + 1 },
+    (_, boundary) => {
+      const left = boundary > 0 ? cellAt(model, 0, boundary - 1) : undefined
+      const right =
+        boundary < model.columns.length ? cellAt(model, 0, boundary) : undefined
+      return right?.borders.left ?? left?.borders.right ?? 'none'
+    }
+  )
+}
+
+const synchronizeUniformColumnBoundaries = (model: TableModel) => {
+  ensureColumnBoundaries(model)
+  for (let boundary = 0; boundary <= model.columns.length; boundary++) {
+    const styles = new Set(
+      model.rows.flatMap((_, row) => {
+        const left = boundary > 0 ? cellAt(model, row, boundary - 1) : undefined
+        const right =
+          boundary < model.columns.length
+            ? cellAt(model, row, boundary)
+            : undefined
+        if (left && right && left.id === right.id) return []
+        return boundary === 0
+          ? [right?.borders.left ?? 'none']
+          : boundary === model.columns.length
+            ? [left?.borders.right ?? 'none']
+            : [left?.borders.right ?? 'none', right?.borders.left ?? 'none']
+      })
+    )
+    if (styles.size === 1) model.columnBoundaries[boundary] = [...styles][0]
+  }
+}
+
 export const assertModel = (model: TableModel) => {
   const occupied = new Set<string>()
   for (const cell of getCells(model)) {
@@ -246,24 +281,11 @@ export const insertRow = (
   longtableSection?: LongtableSection
 ) => {
   const next = cloneModel(model)
-  const anchoredRowId = next.rows[index]?.id
   const newRow = {
     id: createId('row'),
     longtableSection: longtableSection ?? sectionForInsertion(next, index),
   }
   next.rows.splice(index, 0, newRow)
-  if (anchoredRowId) {
-    for (const section of next.latexOrigin?.layout?.sections ?? []) {
-      for (const fragment of section.fragments ?? []) {
-        if (
-          section.kind === (newRow.longtableSection ?? 'body') &&
-          fragment.beforeRowId === anchoredRowId
-        ) {
-          fragment.beforeRowId = newRow.id
-        }
-      }
-    }
-  }
   for (const cell of getCells(next)) {
     if (cell.row >= index) cell.row++
     else if (cell.row + cell.rowSpan > index) cell.rowSpan++
@@ -275,12 +297,15 @@ export const insertRow = (
 
 export const insertColumn = (model: TableModel, index: number) => {
   const next = cloneModel(model)
+  ensureColumnBoundaries(next)
   next.columns.splice(index, 0, {
     id: createId('column'),
     alignment: 'center',
     verticalAlignment: 'top',
     width: { mode: 'auto' },
   })
+  const inheritedBoundary = next.columnBoundaries[index] ?? 'none'
+  next.columnBoundaries.splice(index, 0, inheritedBoundary)
   for (const cell of getCells(next)) {
     if (cell.column >= index) cell.column++
     else if (cell.column + cell.columnSpan > index) cell.columnSpan++
@@ -294,20 +319,6 @@ export const deleteRows = (model: TableModel, from: number, to: number) => {
   const next = cloneModel(model)
   if (to - from + 1 >= next.rows.length)
     throw new Error('A table needs one row')
-  const removedRowIds = new Set(
-    next.rows.slice(from, to + 1).map(row => row.id)
-  )
-  for (const section of next.latexOrigin?.layout?.sections ?? []) {
-    const replacement = next.rows[to + 1]
-    for (const fragment of section.fragments ?? []) {
-      if (fragment.beforeRowId && removedRowIds.has(fragment.beforeRowId)) {
-        fragment.beforeRowId =
-          (replacement?.longtableSection ?? 'body') === section.kind
-            ? replacement.id
-            : undefined
-      }
-    }
-  }
   const count = to - from + 1
   next.rows.splice(from, count)
   for (const cell of getCells(next)) {
@@ -328,10 +339,16 @@ export const deleteRows = (model: TableModel, from: number, to: number) => {
 
 export const deleteColumns = (model: TableModel, from: number, to: number) => {
   const next = cloneModel(model)
+  ensureColumnBoundaries(next)
   if (to - from + 1 >= next.columns.length)
     throw new Error('A table needs one column')
   const count = to - from + 1
+  const rightBoundary = next.columnBoundaries[to + 1] ?? 'none'
   next.columns.splice(from, count)
+  next.columnBoundaries.splice(from + 1, count)
+  if (to === model.columns.length - 1) {
+    next.columnBoundaries[from] = rightBoundary
+  }
   for (const cell of getCells(next)) {
     const overlap = Math.max(
       0,
@@ -493,6 +510,10 @@ export const transpose = (model: TableModel) => {
     verticalAlignment: 'top',
     width: { mode: 'auto' },
   }))
+  next.columnBoundaries = Array.from(
+    { length: next.columns.length + 1 },
+    () => 'none'
+  )
   for (const cell of getCells(next)) {
     ;[cell.row, cell.column] = [cell.column, cell.row]
     ;[cell.rowSpan, cell.columnSpan] = [cell.columnSpan, cell.rowSpan]
@@ -611,6 +632,7 @@ export const applyBorders = (
       if (operation !== 'right' || right) cell.borders.right = 'solid'
     }
   }
+  synchronizeUniformColumnBoundaries(next)
   return next
 }
 
@@ -625,12 +647,14 @@ export const pasteMatrix = (
     start.column + Math.max(0, ...matrix.map(row => row.length))
   while (next.rows.length < neededRows) next.rows.push({ id: createId('row') })
   while (next.columns.length < neededColumns) {
+    ensureColumnBoundaries(next)
     next.columns.push({
       id: createId('column'),
       alignment: 'center',
       verticalAlignment: 'top',
       width: { mode: 'auto' },
     })
+    next.columnBoundaries.push('none')
   }
   fillHoles(next)
   const occupied = buildOccupancy(next)
