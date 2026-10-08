@@ -68,9 +68,17 @@ const renderMultiline = (
       : ''
     return `\\makecell${option}{${lines.join(' \\\\ ')}}`
   }
-  if (presentation?.multiline === 'nested-tabular') {
-    return `\\begin{tabular}[c]{@{}${alignment}@{}}${lines.join(' \\\\ ')}\\end{tabular}`
-  }
+  if (fixedWidth) return lines.join('\\newline ')
+  return `\\shortstack[${alignment}]{${lines.join(' \\\\ ')}}`
+}
+
+const renderRawMultiline = (
+  rawLatex: string,
+  fixedWidth: boolean,
+  alignment: string
+) => {
+  const lines = rawLatex.split(/\r?\n/).map(line => line.trim())
+  if (lines.length === 1) return lines[0]
   if (fixedWidth) return lines.join('\\newline ')
   return `\\shortstack[${alignment}]{${lines.join(' \\\\ ')}}`
 }
@@ -85,16 +93,19 @@ const renderCellContent = (
   const alignment = alignmentLetter(
     cell.horizontalAlignment ?? column.alignment
   )
-  let value =
-    cell.content.rawLatex ??
-    renderMultiline(
-      cell.content.text,
-      column.width.mode === 'fixed',
-      alignment,
-      cell.latexPresentation,
-      packages,
-      escapeLatex
-    )
+  const fixedWidth = column.width.mode === 'fixed'
+  let value = cell.content.rawLatex
+    ? cell.latexPresentation?.multiline === 'flattened-table'
+      ? renderRawMultiline(cell.content.rawLatex, fixedWidth, alignment)
+      : cell.content.rawLatex
+    : renderMultiline(
+        cell.content.text,
+        fixedWidth,
+        alignment,
+        cell.latexPresentation,
+        packages,
+        escapeLatex
+      )
   if (cell.content.style?.bold) value = `\\textbf{${value}}`
   if (cell.content.style?.italic) value = `\\textit{${value}}`
   if (cell.content.style?.color) {

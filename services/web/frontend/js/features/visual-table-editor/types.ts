@@ -58,7 +58,7 @@ export type TableCell = {
   verticalAlignment?: VerticalAlignment
   backgroundColor?: string
   latexPresentation?: {
-    multiline: 'makecell' | 'shortstack' | 'nested-tabular'
+    multiline: 'makecell' | 'shortstack' | 'flattened-table'
     alignment?: HorizontalAlignment
   }
   borders: CellBorders

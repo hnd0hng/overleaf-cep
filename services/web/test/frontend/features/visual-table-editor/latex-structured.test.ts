@@ -84,12 +84,12 @@ A & B & C \\
     expect(generateLatex(parsed.model).packages).to.include('makecell')
   })
 
-  it('does not remove rules inside a nested cell environment', function () {
+  it('removes layout rules while flattening a nested cell environment', function () {
     const parsed = parseLatexTable(latex`\begin{tabular}{cc}
 \begin{tabular}{c}\hline Inner \\ \hline\end{tabular} & Outer \\
 \end{tabular}`)
 
-    expect(cellAt(parsed.model, 0, 0)?.content.rawLatex).to.contain('\\hline')
+    expect(cellAt(parsed.model, 0, 0)?.content.text).to.equal('Inner')
     expect(cellAt(parsed.model, 0, 1)?.content.text).to.equal('Outer')
   })
 

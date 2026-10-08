@@ -50,12 +50,18 @@ const environmentSignatures: Record<string, ArgumentKind[]> = {
   'sidewaystable*': ['optional'],
   tabular: ['optional', 'mandatory'],
   'tabular*': ['mandatory', 'optional', 'mandatory'],
-  tabularx: ['mandatory', 'mandatory'],
+  tabularx: ['mandatory', 'optional', 'mandatory'],
+  'tabularx*': ['mandatory', 'optional', 'mandatory'],
   tabulary: ['mandatory', 'mandatory'],
-  xltabular: ['mandatory', 'mandatory'],
+  xltabular: ['mandatory', 'optional', 'mandatory'],
   longtable: ['optional', 'mandatory'],
   array: ['optional', 'mandatory'],
   NiceTabular: ['optional', 'mandatory', 'optional'],
+  NiceTabularX: ['mandatory', 'optional', 'mandatory', 'optional'],
+  NiceArray: ['optional', 'mandatory', 'optional'],
+  tblr: ['optional', 'mandatory'],
+  longtblr: ['optional', 'mandatory'],
+  talltblr: ['optional', 'mandatory'],
 }
 
 export const commandSignature = (name: string) => signatures[name] ?? []

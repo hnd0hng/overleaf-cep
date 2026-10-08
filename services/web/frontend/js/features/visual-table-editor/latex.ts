@@ -372,14 +372,18 @@ const parseCell = (source: string, row: number, column: number): TableCell => {
     }
     const nestedTable = unwrapNestedCellTable(value)
     if (nestedTable) {
-      const lines = nestedTable.lines.map(line => decodeLatexText(line.trim()))
-      if (lines.every((line): line is string => line !== undefined)) {
-        value = lines.join('\n')
+      const decodedLines = nestedTable.lines.map(line =>
+        decodeLatexText(line.trim())
+      )
+      value = decodedLines.every((line): line is string => line !== undefined)
+        ? decodedLines.join('\n')
+        : nestedTable.lines.join('\n')
+      if (nestedTable.alignment) {
         cell.horizontalAlignment ??= nestedTable.alignment
-        cell.latexPresentation = { multiline: 'nested-tabular' }
-        unwrapped = true
-        continue
       }
+      cell.latexPresentation = { multiline: 'flattened-table' }
+      unwrapped = true
+      continue
     }
     const multiline = unwrapMultiline(value)
     if (multiline !== undefined) {

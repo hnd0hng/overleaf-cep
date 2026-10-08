@@ -10,10 +10,11 @@ export const tableRowHeights = (model: TableModel) => {
   const heights = model.rows.map(() => BASE_ROW_HEIGHT)
 
   for (const cell of Object.values(model.cells)) {
-    if (cell.rowSpan !== 1 || !cell.content.text) continue
+    const editableContent = cell.content.text || cell.content.rawLatex
+    if (cell.rowSpan !== 1 || !editableContent) continue
     const required =
       BASE_ROW_HEIGHT +
-      (editableLineCount(cell.content.text) - 1) * MULTILINE_ROW_INCREMENT
+      (editableLineCount(editableContent) - 1) * MULTILINE_ROW_INCREMENT
     heights[cell.row] = Math.max(heights[cell.row], required)
   }
 
