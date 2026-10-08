@@ -7,7 +7,6 @@ import {
   LongtableSection,
   TableCell,
   TableModel,
-  VerticalAlignment,
 } from './types'
 import {
   rowMoveCrossesLongtableSection,
@@ -199,9 +198,6 @@ export const mergeSelection = (model: TableModel, selection: CellSelection) => {
   merged.backgroundColor = anchor?.backgroundColor
   merged.horizontalAlignment = anchor?.horizontalAlignment
   merged.verticalAlignment = anchor?.verticalAlignment
-  merged.numberFormat = anchor?.numberFormat
-    ? structuredClone(anchor.numberFormat)
-    : undefined
   merged.borders = {
     top: cells.some(
       cell => cell.row === range.minRow && cell.borders.top !== 'none'
@@ -250,9 +246,6 @@ export const splitSelection = (model: TableModel, selection: CellSelection) => {
         replacement.verticalAlignment = cell.verticalAlignment
         if (row === cell.row && column === cell.column) {
           replacement.content = structuredClone(cell.content)
-          replacement.numberFormat = cell.numberFormat
-            ? structuredClone(cell.numberFormat)
-            : undefined
         }
         replacement.borders = {
           top: row === cell.row ? cell.borders.top : emptyBorders().top,
@@ -525,22 +518,11 @@ export const transpose = (model: TableModel) => {
 export const applyAlignment = (
   model: TableModel,
   selection: CellSelection,
-  horizontal?: HorizontalAlignment,
-  vertical?: VerticalAlignment
+  horizontal: HorizontalAlignment
 ) => {
   const next = cloneModel(model)
   for (const cell of selectedCells(next, selection)) {
-    if (horizontal) cell.horizontalAlignment = horizontal
-    if (vertical) cell.verticalAlignment = vertical
-  }
-  if (vertical) {
-    const range = normalizeSelection(selection)
-    for (let column = range.minColumn; column <= range.maxColumn; column++) {
-      next.columns[column].verticalAlignment = vertical
-      if (next.columns[column].width.mode === 'auto') {
-        next.columns[column].width = { mode: 'fixed', value: 3, unit: 'cm' }
-      }
-    }
+    cell.horizontalAlignment = horizontal
   }
   return next
 }
@@ -567,7 +549,6 @@ export const clearFormatting = (
     cell.backgroundColor = undefined
     cell.horizontalAlignment = undefined
     cell.verticalAlignment = undefined
-    cell.numberFormat = undefined
   }
   return next
 }
@@ -683,43 +664,6 @@ export const replaceText = (
       cell.content.text = all
         ? cell.content.text.split(search).join(replacement)
         : cell.content.text.replace(search, replacement)
-    }
-  }
-  return next
-}
-
-export const formatNumbers = (
-  model: TableModel,
-  selection: CellSelection,
-  precision?: number,
-  thousandsSeparator = false,
-  decimalSeparator: '.' | ',' = '.'
-) => {
-  const next = cloneModel(model)
-  for (const cell of selectedCells(next, selection)) {
-    const normalized =
-      decimalSeparator === ','
-        ? cell.content.text.replaceAll('.', '').replace(',', '.')
-        : cell.content.text.replaceAll(',', '')
-    const numeric = Number(normalized)
-    if (!Number.isNaN(numeric)) {
-      let formatted = numeric.toLocaleString('en-US', {
-        useGrouping: thousandsSeparator,
-        minimumFractionDigits: precision,
-        maximumFractionDigits: precision,
-      })
-      if (decimalSeparator === ',') {
-        formatted = formatted
-          .replaceAll(',', '__GROUP__')
-          .replace('.', ',')
-          .replaceAll('__GROUP__', '.')
-      }
-      cell.content.text = formatted
-      cell.numberFormat = {
-        precision,
-        thousandsSeparator,
-        decimalSeparator,
-      }
     }
   }
   return next

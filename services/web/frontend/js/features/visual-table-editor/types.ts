@@ -62,11 +62,6 @@ export type TableCell = {
     alignment?: HorizontalAlignment
   }
   borders: CellBorders
-  numberFormat?: {
-    precision?: number
-    thousandsSeparator?: boolean
-    decimalSeparator?: '.' | ','
-  }
 }
 
 export type TableColumn = {

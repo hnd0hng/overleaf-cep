@@ -506,7 +506,6 @@ const modelSnapshot = (model: TableModel) => ({
         verticalAlignment,
         backgroundColor,
         borders,
-        numberFormat,
       }) => ({
         row,
         column,
@@ -517,7 +516,6 @@ const modelSnapshot = (model: TableModel) => ({
         verticalAlignment,
         backgroundColor,
         borders,
-        numberFormat,
       })
     )
     .sort((a, b) => a.row - b.row || a.column - b.column),

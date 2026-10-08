@@ -1,4 +1,5 @@
 import {
+  applyAlignment,
   applyBorders,
   assertModel,
   cellAt,
@@ -46,11 +47,6 @@ describe('Visual Table Editor core', function () {
     anchor.backgroundColor = '#abcdef'
     anchor.horizontalAlignment = 'right'
     anchor.verticalAlignment = 'middle'
-    anchor.numberFormat = {
-      precision: 2,
-      thousandsSeparator: true,
-      decimalSeparator: '.',
-    }
 
     const selection = {
       from: { row: 0, column: 0 },
@@ -62,7 +58,6 @@ describe('Visual Table Editor core', function () {
     expect(mergedCell.backgroundColor).to.equal('#abcdef')
     expect(mergedCell.horizontalAlignment).to.equal('right')
     expect(mergedCell.verticalAlignment).to.equal('middle')
-    expect(mergedCell.numberFormat).to.deep.equal(anchor.numberFormat)
     expect(mergedCell.borders).to.deep.equal({
       top: 'solid',
       right: 'solid',
@@ -87,6 +82,27 @@ describe('Visual Table Editor core', function () {
       right: 'solid',
       bottom: 'solid',
     })
+  })
+
+  it('applies horizontal alignment without changing vertical alignment', function () {
+    const model = createTableModel(1, 1)
+    const cell = cellAt(model, 0, 0)!
+    model.columns[0].verticalAlignment = 'middle'
+    cell.verticalAlignment = 'bottom'
+
+    const aligned = applyAlignment(
+      model,
+      {
+        from: { row: 0, column: 0 },
+        to: { row: 0, column: 0 },
+      },
+      'right'
+    )
+
+    expect(cellAt(aligned, 0, 0)?.horizontalAlignment).to.equal('right')
+    expect(cellAt(aligned, 0, 0)?.verticalAlignment).to.equal('bottom')
+    expect(aligned.columns[0].verticalAlignment).to.equal('middle')
+    expect(aligned.columns[0].width).to.deep.equal({ mode: 'auto' })
   })
 
   it('preserves occupancy through structural operations and transpose', function () {

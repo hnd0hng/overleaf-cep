@@ -43,7 +43,6 @@ import {
   clearFormatting,
   deleteColumns,
   deleteRows,
-  formatNumbers,
   getColumnMoveError,
   getRowMoveError,
   insertColumn,
@@ -145,9 +144,6 @@ export default function VisualTableEditor({
   const [replace, setReplace] = useState('')
   const [matchIndex, setMatchIndex] = useState(-1)
   const [preservePasteFormatting, setPreservePasteFormatting] = useState(true)
-  const [numberPrecision, setNumberPrecision] = useState(2)
-  const [numberGrouping, setNumberGrouping] = useState(true)
-  const [decimalSeparator, setDecimalSeparator] = useState<'.' | ','>('.')
   const [importOpen, setImportOpen] = useState(false)
   const [moreOptionsOpen, setMoreOptionsOpen] = useState(false)
   const [pasteSpecialOpen, setPasteSpecialOpen] = useState(false)
@@ -975,29 +971,6 @@ export default function VisualTableEditor({
               }
             />
           </div>
-          <div
-            className="vte-toolbar-group"
-            role="group"
-            aria-label="Vertical alignment"
-          >
-            {(['top', 'middle', 'bottom'] as const).map(alignment => (
-              <VisualTableToolbarButton
-                key={alignment}
-                tooltipId={`vte-vertical-align-${alignment}`}
-                icon={
-                  alignment === 'middle'
-                    ? 'vertical_align_center'
-                    : `vertical_align_${alignment}`
-                }
-                label={`Align ${alignment}`}
-                onClick={() =>
-                  apply(current =>
-                    applyAlignment(current, selection, undefined, alignment)
-                  )
-                }
-              />
-            ))}
-          </div>
           <div className="vte-toolbar-group" role="group" aria-label="Borders">
             {(
               [
@@ -1274,60 +1247,6 @@ export default function VisualTableEditor({
                   find &&
                   apply(current =>
                     replaceText(current, find, replace, undefined, true)
-                  )
-                }
-              />
-            </div>
-            <div
-              className="vte-options-group"
-              role="group"
-              aria-label="Number formatting"
-            >
-              <label>
-                Decimals{' '}
-                <OLFormControl
-                  size="sm"
-                  type="number"
-                  min="0"
-                  max="12"
-                  value={numberPrecision}
-                  onChange={event =>
-                    setNumberPrecision(Number(event.target.value))
-                  }
-                />
-              </label>
-              <OLFormCheckbox
-                id="vte-number-grouping"
-                label="Thousands separator"
-                checked={numberGrouping}
-                onChange={event => setNumberGrouping(event.target.checked)}
-              />
-              <label>
-                Decimal{' '}
-                <OLFormSelect
-                  size="sm"
-                  value={decimalSeparator}
-                  onChange={event =>
-                    setDecimalSeparator(event.target.value as '.' | ',')
-                  }
-                >
-                  <option value=".">.</option>
-                  <option value=",">,</option>
-                </OLFormSelect>
-              </label>
-              <VisualTableToolbarButton
-                tooltipId="vte-format-numbers"
-                icon="number"
-                label="Format numbers"
-                onClick={() =>
-                  apply(current =>
-                    formatNumbers(
-                      current,
-                      selection,
-                      numberPrecision,
-                      numberGrouping,
-                      decimalSeparator
-                    )
                   )
                 }
               />
