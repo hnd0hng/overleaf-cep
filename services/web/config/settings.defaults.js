@@ -1032,7 +1032,12 @@ module.exports = {
       ),
     ],
     contactUsModal: [],
-    sourceEditorExtensions: [],
+    sourceEditorExtensions: [
+      Path.resolve(
+        __dirname,
+        '../modules/bib-editor/frontend/js/extensions/bib-editor-extension.ts'
+      ),
+    ],
     sourceEditorVisualExtensions: [],
     sourceEditorComponents: [],
     pdfLogEntryHeaderActionComponents: [],
@@ -1051,11 +1056,16 @@ module.exports = {
     sourceEditorToolbarButtonGroups: [],
     sourceEditorToolbarComponents: [],
     sourceEditorToolbarEndButtons: [],
-    rootContextProviders: [],
+    rootContextProviders: [
+      Path.resolve(
+        __dirname,
+        '../modules/bib-editor/frontend/js/context/bib-editor-provider.tsx'
+      ),
+    ],
     mainEditorLayoutModals: [
       Path.resolve(
         __dirname,
-        '../modules/reference-picker/frontend/components/reference-picker-controller.tsx'
+        '../modules/reference-picker/frontend/js/components/reference-picker-controller.tsx'
       ),
       Path.resolve(
         __dirname,
@@ -1117,7 +1127,12 @@ module.exports = {
     domainVerificationToken: [],
     v1ImportDataScreen: [],
     snapshotUtils: [],
-    visualEditorProviders: [],
+    visualEditorProviders: [
+      Path.resolve(
+        __dirname,
+        '../modules/bib-editor/frontend/js/bib-editor-visual-provider.ts'
+      ),
+    ],
     usGovBanner: [],
     rollingBuildsUpdatedAlert: [],
     offlineModeToolbarButtons: [],
@@ -1125,7 +1140,7 @@ module.exports = {
     autoCompleteExtensions: [
       Path.resolve(
         __dirname,
-        '../modules/reference-picker/frontend/extensions/reference-picker-keybinding.ts'
+        '../modules/reference-picker/frontend/js/extensions/reference-picker-keybinding.ts'
       ),
     ],
     sectionTitleGenerators: [],
@@ -1179,7 +1194,7 @@ module.exports = {
     referenceIndices: [
       Path.resolve(
         __dirname,
-        '../modules/reference-picker/frontend/reference-index/advanced-reference-index.ts'
+        '../modules/reference-picker/frontend/js/reference-index/advanced-reference-index.ts'
       ),
     ],
     railEntries: [
@@ -1210,6 +1225,7 @@ module.exports = {
     'git-bridge',
     'github-sync',
     'zotero',
+    'bib-editor',
     'project-inspection',
   ],
   viewIncludes: {},
